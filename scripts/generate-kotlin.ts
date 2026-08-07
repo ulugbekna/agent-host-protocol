@@ -931,6 +931,7 @@ const STATE_STRUCTS = [
   'MarkdownResponsePart', 'ContentRef',
   'ResourceResponsePart', 'ToolCallResponsePart', 'ReasoningResponsePart',
   'SystemNotificationResponsePart', 'InputRequestResponsePart',
+  'ErrorRecoveryOption', 'ErrorRecovery', 'ErrorResponsePart',
   'ToolCallResult', 'ToolCallStreamingState',
   'ToolCallPendingConfirmationState', 'ToolCallRunningState', 'ToolCallAuthRequiredState',
   'ToolCallPendingResultConfirmationState', 'ToolCallCompletedState',
@@ -970,6 +971,7 @@ const RESPONSE_PART_UNION: UnionConfig = {
     { caseName: 'Reasoning', structName: 'ReasoningResponsePart', discriminantValue: 'reasoning' },
     { caseName: 'SystemNotification', structName: 'SystemNotificationResponsePart', discriminantValue: 'systemNotification' },
     { caseName: 'InputRequest', structName: 'InputRequestResponsePart', discriminantValue: 'inputRequest' },
+    { caseName: 'Error', structName: 'ErrorResponsePart', discriminantValue: 'error' },
   ],
   unknown: true,
 };
@@ -1331,6 +1333,7 @@ const ACTION_VARIANTS: { type: string; caseName: string; tsInterface: string }[]
   { type: 'chat/turnComplete', caseName: 'ChatTurnComplete', tsInterface: 'ChatTurnCompleteAction' },
   { type: 'chat/turnCancelled', caseName: 'ChatTurnCancelled', tsInterface: 'ChatTurnCancelledAction' },
   { type: 'chat/error', caseName: 'ChatError', tsInterface: 'ChatErrorAction' },
+  { type: 'chat/errorRecoverySelected', caseName: 'ChatErrorRecoverySelected', tsInterface: 'ChatErrorRecoverySelectedAction' },
   { type: 'chat/activityChanged', caseName: 'ChatActivityChanged', tsInterface: 'ChatActivityChangedAction' },
   { type: 'session/titleChanged', caseName: 'SessionTitleChanged', tsInterface: 'SessionTitleChangedAction' },
   { type: 'chat/usage', caseName: 'ChatUsage', tsInterface: 'ChatUsageAction' },

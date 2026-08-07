@@ -317,6 +317,8 @@ pub enum ResponsePartKind {
     SystemNotification,
     #[serde(rename = "inputRequest")]
     InputRequest,
+    #[serde(rename = "error")]
+    Error,
 }
 
 /// Status of a tool call in the lifecycle state machine.
@@ -1616,9 +1618,6 @@ pub struct Turn {
     pub usage: Option<UsageInfo>,
     /// How the turn ended
     pub state: TurnState,
-    /// Error details if state is `'error'`
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<ErrorInfo>,
 }
 
 /// An in-progress turn — the assistant is actively streaming.
@@ -2283,6 +2282,65 @@ pub struct InputRequestResponsePart {
     /// `decline`, or `cancel` with `chat/inputCompleted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<ChatInputResponseKind>,
+}
+
+/// An action the host offers to recover from a turn error.
+///
+/// The `id` is opaque to clients. Selecting an option with
+/// `chat/errorRecoverySelected` asks the host to perform the corresponding
+/// recovery, such as retrying the request or starting a quota-purchase flow.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorRecoveryOption {
+    /// Stable option identifier, returned in `chat/errorRecoverySelected`.
+    pub id: String,
+    /// Human-readable label displayed to the user.
+    pub label: String,
+    /// Optional secondary text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Whether this option is the recommended/default choice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended: Option<bool>,
+}
+
+/// Recovery offered for an error.
+///
+/// Presence of this object means the host offered recovery. `options` MUST
+/// contain at least one entry with a unique `id`. Recovery is available while
+/// `selectedOptionId` is absent. Once a client selects an option, the reducer
+/// records its identifier and reopens the same turn. The error part remains in
+/// the response stream so the failure and recovery decision stay visible in
+/// history.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorRecovery {
+    /// Ordered recovery options supplied by the host.
+    pub options: Vec<ErrorRecoveryOption>,
+    /// Identifier of the option selected by the user, absent until recovery is requested.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_option_id: Option<String>,
+}
+
+/// An error encountered while processing a turn.
+///
+/// This is the detailed source of truth for the error. {@link Turn.state}
+/// remains {@link TurnState.Error} while the turn is stopped at this error so
+/// clients can detect the terminal state without inspecting response parts.
+///
+/// When `recovery` is absent, the error is not recoverable. When it is present
+/// and `selectedOptionId` is absent, a client may select one of its host-provided
+/// options with `chat/errorRecoverySelected`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorResponsePart {
+    /// Stable part identifier.
+    pub id: String,
+    /// Error details.
+    pub error: ErrorInfo,
+    /// Recovery offered by the host, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<ErrorRecovery>,
 }
 
 /// Tool execution result details, available after execution completes.
@@ -4327,6 +4385,8 @@ pub enum ResponsePart {
     SystemNotification(SystemNotificationResponsePart),
     #[serde(rename = "inputRequest")]
     InputRequest(InputRequestResponsePart),
+    #[serde(rename = "error")]
+    Error(ErrorResponsePart),
     /// Unknown or future variant — preserved as raw JSON for round-trip fidelity.
     /// Reducers treat this as a no-op.
     #[serde(untagged)]

@@ -5,7 +5,7 @@
  */
 
 import { ActionType } from '../common/actions.js';
-import type { StringOrMarkdown, ErrorInfo, FileEdit, UsageInfo, URI } from '../common/state.js';
+import type { StringOrMarkdown, FileEdit, UsageInfo, URI } from '../common/state.js';
 import type { McpAuthRequirement } from '../channels-session/state.js';
 import type {
   Message,
@@ -16,6 +16,7 @@ import type {
   ChatInputRequest,
   ChatInputResponseKind,
   ConfirmationOption,
+  ErrorResponsePart,
   ToolCallContributor,
   ToolCallRiskAssessment,
   ToolInput,
@@ -118,6 +119,9 @@ export interface ChatDeltaAction {
 /**
  * Structured content appended to the response.
  *
+ * An {@link ErrorResponsePart} MUST be appended with {@link ChatErrorAction}
+ * instead so adding the part and ending the turn are one atomic transition.
+ *
  * @category Chat Actions
  * @version 1
  */
@@ -125,7 +129,7 @@ export interface ChatResponsePartAction {
   type: ActionType.ChatResponsePart;
   /** Turn identifier */
   turnId: string;
-  /** Response part (markdown or content ref) */
+  /** Response part to append; error parts are ignored. */
   part: ResponsePart;
   /**
    * Additional provider-specific metadata for this action.
@@ -488,8 +492,11 @@ export interface ChatErrorAction {
    * data.
    */
   duration: number;
-  /** Error details */
-  error: ErrorInfo;
+  /**
+   * Error part to append to the response stream before finalizing the turn.
+   * Its optional recovery options describe the actions the host can perform.
+   */
+  part: ErrorResponsePart;
   /**
    * Additional provider-specific metadata for this action.
    *
@@ -500,6 +507,27 @@ export interface ChatErrorAction {
    * convention.
    */
   _meta?: Record<string, unknown>;
+}
+
+/**
+ * A client selected one of the host-provided recovery options on an error.
+ *
+ * The reducer records the selected option identifier on the existing error
+ * response part and reopens the same turn without adding another message. The
+ * host performs the opaque recovery behavior identified by `optionId`.
+ *
+ * @category Chat Actions
+ * @version 1
+ * @clientDispatchable
+ */
+export interface ChatErrorRecoverySelectedAction {
+  type: ActionType.ChatErrorRecoverySelected;
+  /** Identifier of the errored turn. */
+  turnId: string;
+  /** Identifier of the error response part. */
+  partId: string;
+  /** Identifier of the selected recovery option. */
+  optionId: string;
 }
 
 /**
@@ -821,6 +849,7 @@ export type ChatAction =
   | ChatTurnCompleteAction
   | ChatTurnCancelledAction
   | ChatErrorAction
+  | ChatErrorRecoverySelectedAction
   | ChatActivityChangedAction
   | ChatWorkingDirectorySetAction
   | ChatWorkingDirectoryRemovedAction

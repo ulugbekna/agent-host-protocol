@@ -12,6 +12,7 @@ import type {
   ResponsePart,
   ToolCallResponsePart,
   InputRequestResponsePart,
+  ErrorResponsePart,
   Turn,
   PendingMessage,
   ConfirmationOption,
@@ -121,6 +122,23 @@ function findOpenInputRequestPart(
   return part.kind === ResponsePartKind.InputRequest ? { index, part } : undefined;
 }
 
+function findAvailableErrorRecoveryPart(
+  responseParts: readonly ResponsePart[],
+  partId: string,
+): { index: number; part: ErrorResponsePart } | undefined {
+  const index = responseParts.findIndex(part =>
+    part.kind === ResponsePartKind.Error
+    && part.id === partId
+    && part.recovery !== undefined
+    && part.recovery.selectedOptionId === undefined,
+  );
+  if (index < 0) {
+    return undefined;
+  }
+  const part = responseParts[index];
+  return part.kind === ResponsePartKind.Error ? { index, part } : undefined;
+}
+
 /** Bitmask covering the mutually-exclusive activity bits (bits 0–4). */
 const STATUS_ACTIVITY_MASK = (1 << 5) - 1;
 
@@ -170,7 +188,7 @@ function endTurn(
   turnState: TurnState,
   duration: number,
   terminalStatus?: SessionStatus.Error,
-  error?: { errorType: string; message: string; stack?: string },
+  errorPart?: ErrorResponsePart,
 ): ChatState {
   if (!state.activeTurn || state.activeTurn.id !== turnId) {
     return state;
@@ -197,6 +215,9 @@ function endTurn(
       },
     };
   });
+  if (errorPart) {
+    responseParts.push(errorPart);
+  }
 
   const turn: Turn = {
     id: active.id,
@@ -208,7 +229,6 @@ function endTurn(
     responseParts,
     usage: active.usage,
     state: turnState,
-    error,
   };
 
   const next: ChatState = {
@@ -385,6 +405,9 @@ export function chatReducer(state: ChatState, action: ChatAction, log?: (msg: st
       if (!state.activeTurn || state.activeTurn.id !== action.turnId) {
         return state;
       }
+      if (action.part.kind === ResponsePartKind.Error) {
+        return state;
+      }
       return {
         ...state,
         activeTurn: {
@@ -400,7 +423,51 @@ export function chatReducer(state: ChatState, action: ChatAction, log?: (msg: st
       return endTurn(state, action.turnId, TurnState.Cancelled, action.duration);
 
     case ActionType.ChatError:
-      return endTurn(state, action.turnId, TurnState.Error, action.duration, SessionStatus.Error, action.error);
+      return endTurn(state, action.turnId, TurnState.Error, action.duration, SessionStatus.Error, action.part);
+
+    case ActionType.ChatErrorRecoverySelected: {
+      if (state.activeTurn) {
+        return state;
+      }
+      const turnIndex = state.turns.length - 1;
+      const turn = state.turns[turnIndex];
+      if (!turn || turn.id !== action.turnId || turn.state !== TurnState.Error) {
+        return state;
+      }
+      const recoveryPart = findAvailableErrorRecoveryPart(turn.responseParts, action.partId);
+      if (!recoveryPart?.part.recovery) {
+        return state;
+      }
+      if (!recoveryPart.part.recovery.options.some(option => option.id === action.optionId)) {
+        return state;
+      }
+      const responseParts = [...turn.responseParts];
+      responseParts[recoveryPart.index] = {
+        ...recoveryPart.part,
+        recovery: {
+          ...recoveryPart.part.recovery,
+          selectedOptionId: action.optionId,
+        },
+      };
+      const turns = state.turns.slice();
+      turns.splice(turnIndex, 1);
+      const next: ChatState = {
+        ...state,
+        turns,
+        activeTurn: {
+          id: turn.id,
+          startedAt: turn.startedAt ?? state.modifiedAt,
+          message: turn.message,
+          responseParts,
+          usage: turn.usage,
+        },
+      };
+      return {
+        ...next,
+        status: withStatusFlag(summaryStatus(next), SessionStatus.IsRead, false),
+        modifiedAt: new Date(Date.now()).toISOString(),
+      };
+    }
 
     case ActionType.ChatActivityChanged:
       return { ...state, activity: action.activity };

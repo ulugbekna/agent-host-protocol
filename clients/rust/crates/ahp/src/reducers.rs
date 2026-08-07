@@ -59,15 +59,16 @@ use ahp_types::actions::{
 };
 use ahp_types::state::{
     ActiveTurn, AnnotationsState, ChangesetOperationStatus, ChangesetState, ChangesetStatus,
-    ChatInputRequest, ChatState, ChildCustomization, ConfirmationOption, Customization, ErrorInfo,
-    InputRequestResponsePart, McpServerStartingState, McpServerState, McpServerStoppedState,
-    PendingMessage, PendingMessageKind, ResourceWatchState, ResponsePart, RootState,
-    SessionInputRequest, SessionLifecycle, SessionState, SessionStatus, TerminalCommandPart,
-    TerminalContentPart, TerminalState, TerminalUnclassifiedPart, ToolCallAuthRequiredState,
-    ToolCallCancellationReason, ToolCallCancelledState, ToolCallCompletedState,
-    ToolCallConfirmationReason, ToolCallContributor, ToolCallPendingConfirmationState,
-    ToolCallPendingResultConfirmationState, ToolCallResponsePart, ToolCallRunningState,
-    ToolCallState, ToolCallStatus, ToolCallStreamingState, ToolInput, Turn, TurnState,
+    ChatInputRequest, ChatState, ChildCustomization, ConfirmationOption, Customization,
+    ErrorResponsePart, InputRequestResponsePart, McpServerStartingState, McpServerState,
+    McpServerStoppedState, PendingMessage, PendingMessageKind, ResourceWatchState, ResponsePart,
+    RootState, SessionInputRequest, SessionLifecycle, SessionState, SessionStatus,
+    TerminalCommandPart, TerminalContentPart, TerminalState, TerminalUnclassifiedPart,
+    ToolCallAuthRequiredState, ToolCallCancellationReason, ToolCallCancelledState,
+    ToolCallCompletedState, ToolCallConfirmationReason, ToolCallContributor,
+    ToolCallPendingConfirmationState, ToolCallPendingResultConfirmationState, ToolCallResponsePart,
+    ToolCallRunningState, ToolCallState, ToolCallStatus, ToolCallStreamingState, ToolInput, Turn,
+    TurnState,
 };
 
 /// What happened when an action was applied.
@@ -340,7 +341,7 @@ fn end_turn(
     duration: i64,
     turn_state: TurnState,
     terminal_status: Option<SessionStatus>,
-    error: Option<ErrorInfo>,
+    error_part: Option<ErrorResponsePart>,
 ) -> ReduceOutcome {
     let Some(active) = state.active_turn.as_ref() else {
         return ReduceOutcome::NoOp;
@@ -350,7 +351,7 @@ fn end_turn(
     }
     let active = state.active_turn.take().unwrap();
 
-    let response_parts: Vec<ResponsePart> = active
+    let mut response_parts: Vec<ResponsePart> = active
         .response_parts
         .into_iter()
         .map(|part| match part {
@@ -397,6 +398,9 @@ fn end_turn(
             other => other,
         })
         .collect();
+    if let Some(error_part) = error_part {
+        response_parts.push(ResponsePart::Error(error_part));
+    }
 
     // Defensive clamp: `duration` is producer-supplied and opaque to this
     // reducer, but a negative value would be nonsensical to display.
@@ -408,7 +412,6 @@ fn end_turn(
         response_parts,
         usage: active.usage,
         state: turn_state,
-        error,
     };
 
     state.turns.push(turn);
@@ -596,6 +599,7 @@ where
             ResponsePart::ToolCall(tc) => Some(tool_call_id(&tc.tool_call).to_owned()),
             ResponsePart::Markdown(m) => Some(m.id.clone()),
             ResponsePart::Reasoning(r) => Some(r.id.clone()),
+            ResponsePart::Error(error) => Some(error.id.clone()),
             ResponsePart::ContentRef(_)
             | ResponsePart::SystemNotification(_)
             | ResponsePart::InputRequest(_)
@@ -967,6 +971,9 @@ pub fn apply_action_to_chat(state: &mut ChatState, action: &StateAction) -> Redu
             if active.id != a.turn_id {
                 return ReduceOutcome::NoOp;
             }
+            if matches!(a.part, ResponsePart::Error(_)) {
+                return ReduceOutcome::NoOp;
+            }
             active.response_parts.push(a.part.clone());
             ReduceOutcome::Applied
         }
@@ -992,8 +999,49 @@ pub fn apply_action_to_chat(state: &mut ChatState, action: &StateAction) -> Redu
             a.duration,
             TurnState::Error,
             Some(SessionStatus::Error),
-            Some(a.error.clone()),
+            Some(a.part.clone()),
         ),
+        StateAction::ChatErrorRecoverySelected(a) => {
+            if state.active_turn.is_some() {
+                return ReduceOutcome::NoOp;
+            }
+            let Some(turn) = state.turns.last_mut() else {
+                return ReduceOutcome::NoOp;
+            };
+            if turn.id != a.turn_id || turn.state != TurnState::Error {
+                return ReduceOutcome::NoOp;
+            }
+            let Some(recovery) = turn.response_parts.iter_mut().find_map(|part| match part {
+                ResponsePart::Error(error) if error.id == a.part_id => error
+                    .recovery
+                    .as_mut()
+                    .filter(|recovery| recovery.selected_option_id.is_none()),
+                _ => None,
+            }) else {
+                return ReduceOutcome::NoOp;
+            };
+            if !recovery
+                .options
+                .iter()
+                .any(|option| option.id == a.option_id)
+            {
+                return ReduceOutcome::NoOp;
+            }
+            recovery.selected_option_id = Some(a.option_id.clone());
+
+            let turn = state.turns.pop().unwrap();
+            state.active_turn = Some(ActiveTurn {
+                id: turn.id,
+                started_at: turn.started_at.unwrap_or_else(|| state.modified_at.clone()),
+                message: turn.message,
+                response_parts: turn.response_parts,
+                usage: turn.usage,
+            });
+            refresh_summary_status(state);
+            state.status = with_status_flag(state.status, SessionStatus::IsRead, false);
+            touch_chat_modified(state);
+            ReduceOutcome::Applied
+        }
         StateAction::ChatActivityChanged(a) => {
             state.activity = a.activity.clone();
             ReduceOutcome::Applied

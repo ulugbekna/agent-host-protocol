@@ -3018,10 +3018,6 @@
         "state": {
           "$ref": "#/$defs/TurnState",
           "description": "How the turn ended"
-        },
-        "error": {
-          "$ref": "#/$defs/ErrorInfo",
-          "description": "Error details if state is `'error'`"
         }
       },
       "required": [
@@ -3471,6 +3467,79 @@
       "required": [
         "kind",
         "request"
+      ]
+    },
+    "ErrorRecoveryOption": {
+      "type": "object",
+      "description": "An action the host offers to recover from a turn error.\n\nThe `id` is opaque to clients. Selecting an option with\n`chat/errorRecoverySelected` asks the host to perform the corresponding\nrecovery, such as retrying the request or starting a quota-purchase flow.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable option identifier, returned in `chat/errorRecoverySelected`."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable label displayed to the user."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional secondary text."
+        },
+        "recommended": {
+          "type": "boolean",
+          "description": "Whether this option is the recommended/default choice."
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ]
+    },
+    "ErrorRecovery": {
+      "type": "object",
+      "description": "Recovery offered for an error.\n\nPresence of this object means the host offered recovery. `options` MUST\ncontain at least one entry with a unique `id`. Recovery is available while\n`selectedOptionId` is absent. Once a client selects an option, the reducer\nrecords its identifier and reopens the same turn. The error part remains in\nthe response stream so the failure and recovery decision stay visible in\nhistory.",
+      "properties": {
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ErrorRecoveryOption"
+          },
+          "description": "Ordered recovery options supplied by the host."
+        },
+        "selectedOptionId": {
+          "type": "string",
+          "description": "Identifier of the option selected by the user, absent until recovery is requested."
+        }
+      },
+      "required": [
+        "options"
+      ]
+    },
+    "ErrorResponsePart": {
+      "type": "object",
+      "description": "An error encountered while processing a turn.\n\nThis is the detailed source of truth for the error. {@link Turn.state}\nremains {@link TurnState.Error} while the turn is stopped at this error so\nclients can detect the terminal state without inspecting response parts.\n\nWhen `recovery` is absent, the error is not recoverable. When it is present\nand `selectedOptionId` is absent, a client may select one of its host-provided\noptions with `chat/errorRecoverySelected`.",
+      "properties": {
+        "kind": {
+          "const": "error",
+          "description": "Discriminant"
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable part identifier."
+        },
+        "error": {
+          "$ref": "#/$defs/ErrorInfo",
+          "description": "Error details."
+        },
+        "recovery": {
+          "$ref": "#/$defs/ErrorRecovery",
+          "description": "Recovery offered by the host, if any."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "error"
       ]
     },
     "SystemNotificationResponsePart": {
@@ -6837,6 +6906,9 @@
         },
         {
           "$ref": "#/$defs/InputRequestResponsePart"
+        },
+        {
+          "$ref": "#/$defs/ErrorResponsePart"
         }
       ]
     },
@@ -7219,6 +7291,9 @@
         },
         {
           "$ref": "#/$defs/ChatErrorAction"
+        },
+        {
+          "$ref": "#/$defs/ChatErrorRecoverySelectedAction"
         },
         {
           "$ref": "#/$defs/ChatActivityChangedAction"
@@ -8123,7 +8198,7 @@
     },
     "ChatResponsePartAction": {
       "type": "object",
-      "description": "Structured content appended to the response.",
+      "description": "Structured content appended to the response.\n\nAn {@link ErrorResponsePart} MUST be appended with {@link ChatErrorAction}\ninstead so adding the part and ending the turn are one atomic transition.",
       "properties": {
         "type": {
           "const": "chat/responsePart"
@@ -8134,7 +8209,7 @@
         },
         "part": {
           "$ref": "#/$defs/ResponsePart",
-          "description": "Response part (markdown or content ref)"
+          "description": "Response part to append; error parts are ignored."
         },
         "_meta": {
           "type": "object",
@@ -8552,9 +8627,9 @@
           "type": "number",
           "description": "Elapsed turn duration in milliseconds, measured by the producer's own\nclock. Clients MUST NOT derive this by subtracting timestamps — cross-\nclient clocks may differ — and MUST treat it as opaque, producer-supplied\ndata."
         },
-        "error": {
-          "$ref": "#/$defs/ErrorInfo",
-          "description": "Error details"
+        "part": {
+          "$ref": "#/$defs/ErrorResponsePart",
+          "description": "Error part to append to the response stream before finalizing the turn.\nIts optional recovery options describe the actions the host can perform."
         },
         "_meta": {
           "type": "object",
@@ -8566,7 +8641,34 @@
         "type",
         "turnId",
         "duration",
-        "error"
+        "part"
+      ]
+    },
+    "ChatErrorRecoverySelectedAction": {
+      "type": "object",
+      "description": "A client selected one of the host-provided recovery options on an error.\n\nThe reducer records the selected option identifier on the existing error\nresponse part and reopens the same turn without adding another message. The\nhost performs the opaque recovery behavior identified by `optionId`.",
+      "properties": {
+        "type": {
+          "const": "chat/errorRecoverySelected"
+        },
+        "turnId": {
+          "type": "string",
+          "description": "Identifier of the errored turn."
+        },
+        "partId": {
+          "type": "string",
+          "description": "Identifier of the error response part."
+        },
+        "optionId": {
+          "type": "string",
+          "description": "Identifier of the selected recovery option."
+        }
+      },
+      "required": [
+        "type",
+        "turnId",
+        "partId",
+        "optionId"
       ]
     },
     "ChatActivityChangedAction": {

@@ -565,8 +565,6 @@ export interface Turn {
   usage: UsageInfo | undefined;
   /** How the turn ended */
   state: TurnState;
-  /** Error details if state is `'error'` */
-  error?: ErrorInfo;
 }
 
 /**
@@ -862,6 +860,7 @@ export const enum ResponsePartKind {
   Reasoning = 'reasoning',
   SystemNotification = 'systemNotification',
   InputRequest = 'inputRequest',
+  Error = 'error',
 }
 
 /**
@@ -925,7 +924,8 @@ export type ResponsePart =
   | ToolCallResponsePart
   | ReasoningResponsePart
   | SystemNotificationResponsePart
-  | InputRequestResponsePart;
+  | InputRequestResponsePart
+  | ErrorResponsePart;
 
 /**
  * A live or resolved input request (elicitation) in the turn response stream.
@@ -954,6 +954,69 @@ export interface InputRequestResponsePart {
    * `decline`, or `cancel` with `chat/inputCompleted`.
    */
   response?: ChatInputResponseKind;
+}
+
+/**
+ * An action the host offers to recover from a turn error.
+ *
+ * The `id` is opaque to clients. Selecting an option with
+ * `chat/errorRecoverySelected` asks the host to perform the corresponding
+ * recovery, such as retrying the request or starting a quota-purchase flow.
+ *
+ * @category Response Parts
+ */
+export interface ErrorRecoveryOption {
+  /** Stable option identifier, returned in `chat/errorRecoverySelected`. */
+  id: string;
+  /** Human-readable label displayed to the user. */
+  label: string;
+  /** Optional secondary text. */
+  description?: string;
+  /** Whether this option is the recommended/default choice. */
+  recommended?: boolean;
+}
+
+/**
+ * Recovery offered for an error.
+ *
+ * Presence of this object means the host offered recovery. `options` MUST
+ * contain at least one entry with a unique `id`. Recovery is available while
+ * `selectedOptionId` is absent. Once a client selects an option, the reducer
+ * records its identifier and reopens the same turn. The error part remains in
+ * the response stream so the failure and recovery decision stay visible in
+ * history.
+ *
+ * @category Response Parts
+ */
+export interface ErrorRecovery {
+  /** Ordered recovery options supplied by the host. */
+  options: ErrorRecoveryOption[];
+  /** Identifier of the option selected by the user, absent until recovery is requested. */
+  selectedOptionId?: string;
+}
+
+/**
+ * An error encountered while processing a turn.
+ *
+ * This is the detailed source of truth for the error. {@link Turn.state}
+ * remains {@link TurnState.Error} while the turn is stopped at this error so
+ * clients can detect the terminal state without inspecting response parts.
+ *
+ * When `recovery` is absent, the error is not recoverable. When it is present
+ * and `selectedOptionId` is absent, a client may select one of its host-provided
+ * options with `chat/errorRecoverySelected`.
+ *
+ * @category Response Parts
+ */
+export interface ErrorResponsePart {
+  /** Discriminant */
+  kind: ResponsePartKind.Error;
+  /** Stable part identifier. */
+  id: string;
+  /** Error details. */
+  error: ErrorInfo;
+  /** Recovery offered by the host, if any. */
+  recovery?: ErrorRecovery;
 }
 
 /**

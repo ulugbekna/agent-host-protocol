@@ -208,6 +208,7 @@ public enum ResponsePartKind: String, Codable, Sendable {
     case reasoning = "reasoning"
     case systemNotification = "systemNotification"
     case inputRequest = "inputRequest"
+    case error = "error"
 }
 
 /// Status of a tool call in the lifecycle state machine.
@@ -1545,8 +1546,6 @@ public struct Turn: Codable, Sendable {
     public var usage: UsageInfo?
     /// How the turn ended
     public var state: TurnState
-    /// Error details if state is `'error'`
-    public var error: ErrorInfo?
 
     public init(
         id: String,
@@ -1555,8 +1554,7 @@ public struct Turn: Codable, Sendable {
         message: Message,
         responseParts: [ResponsePart],
         usage: UsageInfo? = nil,
-        state: TurnState,
-        error: ErrorInfo? = nil
+        state: TurnState
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -1565,7 +1563,6 @@ public struct Turn: Codable, Sendable {
         self.responseParts = responseParts
         self.usage = usage
         self.state = state
-        self.error = error
     }
 }
 
@@ -2527,6 +2524,67 @@ public struct InputRequestResponsePart: Codable, Sendable {
         self.kind = kind
         self.request = request
         self.response = response
+    }
+}
+
+public struct ErrorRecoveryOption: Codable, Sendable {
+    /// Stable option identifier, returned in `chat/errorRecoverySelected`.
+    public var id: String
+    /// Human-readable label displayed to the user.
+    public var label: String
+    /// Optional secondary text.
+    public var description: String?
+    /// Whether this option is the recommended/default choice.
+    public var recommended: Bool?
+
+    public init(
+        id: String,
+        label: String,
+        description: String? = nil,
+        recommended: Bool? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.description = description
+        self.recommended = recommended
+    }
+}
+
+public struct ErrorRecovery: Codable, Sendable {
+    /// Ordered recovery options supplied by the host.
+    public var options: [ErrorRecoveryOption]
+    /// Identifier of the option selected by the user, absent until recovery is requested.
+    public var selectedOptionId: String?
+
+    public init(
+        options: [ErrorRecoveryOption],
+        selectedOptionId: String? = nil
+    ) {
+        self.options = options
+        self.selectedOptionId = selectedOptionId
+    }
+}
+
+public struct ErrorResponsePart: Codable, Sendable {
+    /// Discriminant
+    public var kind: ResponsePartKind
+    /// Stable part identifier.
+    public var id: String
+    /// Error details.
+    public var error: ErrorInfo
+    /// Recovery offered by the host, if any.
+    public var recovery: ErrorRecovery?
+
+    public init(
+        kind: ResponsePartKind,
+        id: String,
+        error: ErrorInfo,
+        recovery: ErrorRecovery? = nil
+    ) {
+        self.kind = kind
+        self.id = id
+        self.error = error
+        self.recovery = recovery
     }
 }
 
@@ -5338,6 +5396,7 @@ public enum ResponsePart: Codable, Sendable {
     case reasoning(ReasoningResponsePart)
     case systemNotification(SystemNotificationResponsePart)
     case inputRequest(InputRequestResponsePart)
+    case error(ErrorResponsePart)
     /// Unknown or future discriminant; the raw payload is preserved
     /// and re-encoded verbatim for forward-compatibility.
     case unknown(AnyCodable)
@@ -5362,6 +5421,8 @@ public enum ResponsePart: Codable, Sendable {
             self = .systemNotification(try SystemNotificationResponsePart(from: decoder))
         case "inputRequest":
             self = .inputRequest(try InputRequestResponsePart(from: decoder))
+        case "error":
+            self = .error(try ErrorResponsePart(from: decoder))
         default:
             self = .unknown(try AnyCodable(from: decoder))
         }
@@ -5375,6 +5436,7 @@ public enum ResponsePart: Codable, Sendable {
         case .reasoning(let value): try value.encode(to: encoder)
         case .systemNotification(let value): try value.encode(to: encoder)
         case .inputRequest(let value): try value.encode(to: encoder)
+        case .error(let value): try value.encode(to: encoder)
         case .unknown(let value): try value.encode(to: encoder)
         }
     }

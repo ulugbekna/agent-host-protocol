@@ -187,9 +187,12 @@ Turn {
   responseParts: ResponsePart[]     // all content in stream order
   usage: UsageInfo | undefined
   state: 'complete' | 'cancelled' | 'error'
-  error?: ErrorInfo
 }
 ```
+
+`state: 'error'` is the convenient top-level signal that processing stopped on
+an error. The detailed error and any recovery interaction live in an
+`ErrorResponsePart`, preserving their position in the response stream.
 
 ### Active Turn
 
@@ -344,6 +347,17 @@ InputRequestResponsePart {
   request: ChatInputRequest   // the resolved request, with its final answers
   response: ChatInputResponseKind  // 'accept' | 'decline' | 'cancel'
 }
+
+// Durable error and recovery record
+ErrorResponsePart {
+  kind: 'error'
+  id: string
+  error: ErrorInfo
+  recovery?: {
+    options: ErrorRecoveryOption[]       // host-provided actions
+    selectedOptionId?: string            // durable user decision
+  }
+}
 ```
 
 `SystemNotificationResponsePart._meta` carries provider-specific metadata describing what triggered the notification. A host MAY attach a machine-readable descriptor so clients can categorize, icon, group, filter, or localize the notification without parsing `content`. Clients MAY inspect well-known keys for enhanced UI, and MUST render coherently from `content` alone when `_meta` is absent or unrecognized.
@@ -353,6 +367,13 @@ Text content uses a **create-then-append** pattern: the server first emits a `ch
 Clients fetch `ContentRef` content separately via the `resourceRead(uri)` command. This keeps the state tree small and serializable.
 
 Consumers can derive display text by concatenating all `markdown` parts, find tool calls by filtering for `toolCall` parts, and access reasoning by filtering for `reasoning` parts.
+
+An error part without `recovery` is unrecoverable. When recovery is present and
+`selectedOptionId` is absent, clients render its ordered options and dispatch
+`chat/errorRecoverySelected` with the turn, part, and option identifiers. The
+reducer records the selected option ID on the part and reopens the same turn
+without adding a user message. If processing fails again, the host appends
+another error part; prior errors and selections remain in stream order.
 
 ## Tool Call Lifecycle
 

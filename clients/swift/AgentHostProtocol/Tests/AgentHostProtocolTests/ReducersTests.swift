@@ -88,11 +88,19 @@ final class ReducersTests: XCTestCase {
     // MARK: - Dispatch Validation
 
     func testClientDispatchableReturnsTrue() {
-        let action: StateAction = .chatTurnStarted(ChatTurnStartedAction(
-            type: .chatTurnStarted, turnId: T, startedAt: "2026-07-09T20:00:00.000Z",
-            message: Message(text: "Hello", origin: MessageOrigin(kind: .user))
-        ))
-        XCTAssertTrue(isClientDispatchable(action))
+        let actions: [StateAction] = [
+            .chatTurnStarted(ChatTurnStartedAction(
+                type: .chatTurnStarted, turnId: T, startedAt: "2026-07-09T20:00:00.000Z",
+                message: Message(text: "Hello", origin: MessageOrigin(kind: .user))
+            )),
+            .chatErrorRecoverySelected(ChatErrorRecoverySelectedAction(
+                type: .chatErrorRecoverySelected,
+                turnId: T,
+                partId: "error-1",
+                optionId: "retry"
+            )),
+        ]
+        XCTAssertTrue(actions.allSatisfy(isClientDispatchable))
     }
 
     func testClientDispatchableReturnsFalse() {

@@ -174,8 +174,38 @@ Once a chat exists and its session is `lifecycle: 'ready'`, the chat accepts tur
 - The client dispatches `chat/toolCallConfirmed` / `chat/toolCallResultConfirmed` to approve or deny tool calls, or `chat/turnCancelled` to abort.
 - The server dispatches `chat/turnComplete` or `chat/error` when the turn ends.
 - The server MAY dispatch `chat/inputRequested` while a turn is active. Clients sync answer drafts with `chat/inputAnswerChanged` and finish the request with `chat/inputCompleted`.
+- A `chat/error` appends an error response part before setting the turn state to `error`. When that part offers recovery options, a client may dispatch `chat/errorRecoverySelected` to record the selected option and continue the same turn without another user message.
 
 All actions dispatched on this channel travel on `ActionEnvelope`s whose `channel` is the chat URI. Action payloads do NOT carry their own chat URI — the channel comes from the envelope.
+
+### Error recovery
+
+An error ends the active turn with `TurnState.Error`, providing a simple
+top-level signal for clients that do not implement recovery. Its
+`ErrorResponsePart` is the detailed source of truth: it contains `ErrorInfo`
+and, when recovery was offered, ordered host-provided options. An error part
+without recovery is unrecoverable. Recovery remains available while the
+recovery record has no `selectedOptionId`.
+
+Errors MUST enter the response stream through `chat/error`; reducers ignore an
+error part sent through generic `chat/responsePart`. This keeps appending the
+detailed error and ending the turn as one atomic state transition.
+
+Recovery options are opaque actions owned by the host. They may represent
+retrying the request, purchasing more quota, or another provider-specific
+recovery flow. Clients render the supplied labels and return only the selected
+option identifier; they do not infer behavior from identifiers or labels.
+
+Selecting an option with `chat/errorRecoverySelected` records its identifier
+on the error part and reopens the same turn. The original message, turn
+identifier, response parts, and usage are retained. A successful continuation
+eventually finalizes that turn as complete. If continuation fails, `chat/error`
+appends another error part. This preserves every failure and recovery decision
+in response-stream order without creating a synthetic turn or message.
+
+The server MUST validate and sequence the selection before invoking the
+option's host behavior. A rejected or stale selection MUST NOT produce side
+effects.
 
 ### Tool call metadata refinement
 
@@ -225,6 +255,7 @@ When the server receives a client-dispatched action on this channel, it MUST val
 | Any action referencing a non-existent chat | Channel URI not found                                                                                                      | Server MUST silently ignore the action (no echo)                                                 |
 | `chat/toolCallConfirmed`                   | Tool call not in `pending-confirmation` state                                                                              | Server MUST reject the action                                                                    |
 | `chat/turnCancelled`                       | No active turn                                                                                                             | Server MUST reject the action                                                                    |
+| `chat/errorRecoverySelected`               | An active turn exists, `turnId` is not the latest errored turn, `partId` is not an unselected recoverable error part, or `optionId` is not offered by that part | Server MUST reject the action |
 | `chat/inputAnswerChanged`                  | No input request with matching `requestId`                                                                                 | Server SHOULD reject the action                                                                  |
 | `chat/inputAnswerChanged`                  | `answer.state` requires a value but `answer.value` is absent, or `answer.value.kind` is missing the matching payload field | Server SHOULD reject the action                                                                  |
 | `chat/inputCompleted`                      | No input request with matching `requestId`                                                                                 | Server SHOULD reject the action                                                                  |

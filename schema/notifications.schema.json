@@ -3181,10 +3181,6 @@
         "state": {
           "$ref": "#/$defs/TurnState",
           "description": "How the turn ended"
-        },
-        "error": {
-          "$ref": "#/$defs/ErrorInfo",
-          "description": "Error details if state is `'error'`"
         }
       },
       "required": [
@@ -3634,6 +3630,79 @@
       "required": [
         "kind",
         "request"
+      ]
+    },
+    "ErrorRecoveryOption": {
+      "type": "object",
+      "description": "An action the host offers to recover from a turn error.\n\nThe `id` is opaque to clients. Selecting an option with\n`chat/errorRecoverySelected` asks the host to perform the corresponding\nrecovery, such as retrying the request or starting a quota-purchase flow.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable option identifier, returned in `chat/errorRecoverySelected`."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable label displayed to the user."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional secondary text."
+        },
+        "recommended": {
+          "type": "boolean",
+          "description": "Whether this option is the recommended/default choice."
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ]
+    },
+    "ErrorRecovery": {
+      "type": "object",
+      "description": "Recovery offered for an error.\n\nPresence of this object means the host offered recovery. `options` MUST\ncontain at least one entry with a unique `id`. Recovery is available while\n`selectedOptionId` is absent. Once a client selects an option, the reducer\nrecords its identifier and reopens the same turn. The error part remains in\nthe response stream so the failure and recovery decision stay visible in\nhistory.",
+      "properties": {
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ErrorRecoveryOption"
+          },
+          "description": "Ordered recovery options supplied by the host."
+        },
+        "selectedOptionId": {
+          "type": "string",
+          "description": "Identifier of the option selected by the user, absent until recovery is requested."
+        }
+      },
+      "required": [
+        "options"
+      ]
+    },
+    "ErrorResponsePart": {
+      "type": "object",
+      "description": "An error encountered while processing a turn.\n\nThis is the detailed source of truth for the error. {@link Turn.state}\nremains {@link TurnState.Error} while the turn is stopped at this error so\nclients can detect the terminal state without inspecting response parts.\n\nWhen `recovery` is absent, the error is not recoverable. When it is present\nand `selectedOptionId` is absent, a client may select one of its host-provided\noptions with `chat/errorRecoverySelected`.",
+      "properties": {
+        "kind": {
+          "const": "error",
+          "description": "Discriminant"
+        },
+        "id": {
+          "type": "string",
+          "description": "Stable part identifier."
+        },
+        "error": {
+          "$ref": "#/$defs/ErrorInfo",
+          "description": "Error details."
+        },
+        "recovery": {
+          "$ref": "#/$defs/ErrorRecovery",
+          "description": "Recovery offered by the host, if any."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "error"
       ]
     },
     "SystemNotificationResponsePart": {
@@ -5515,6 +5584,9 @@
         },
         {
           "$ref": "#/$defs/InputRequestResponsePart"
+        },
+        {
+          "$ref": "#/$defs/ErrorResponsePart"
         }
       ]
     },

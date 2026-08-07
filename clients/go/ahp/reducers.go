@@ -190,6 +190,16 @@ func hasOpenInputRequest(state *ahptypes.ChatState) bool {
 	return false
 }
 
+func findAvailableErrorRecoveryPart(responseParts []ahptypes.ResponsePart, partID string) (int, *ahptypes.ErrorResponsePart) {
+	for i := range responseParts {
+		part, ok := responseParts[i].Value.(*ahptypes.ErrorResponsePart)
+		if ok && part.Id == partID && part.Recovery != nil && part.Recovery.SelectedOptionId == nil {
+			return i, part
+		}
+	}
+	return -1, nil
+}
+
 func summaryStatus(state *ahptypes.ChatState, terminal *ahptypes.SessionStatus) ahptypes.SessionStatus {
 	var activity ahptypes.SessionStatus
 	switch {
@@ -215,7 +225,7 @@ func touchChatModified(state *ahptypes.ChatState) {
 
 // ─── Active-turn helpers ───────────────────────────────────────────────
 
-func endTurn(state *ahptypes.ChatState, turnID string, duration int64, turnState ahptypes.TurnState, terminalStatus *ahptypes.SessionStatus, errInfo *ahptypes.ErrorInfo) ReduceOutcome {
+func endTurn(state *ahptypes.ChatState, turnID string, duration int64, turnState ahptypes.TurnState, terminalStatus *ahptypes.SessionStatus, errorPart *ahptypes.ErrorResponsePart) ReduceOutcome {
 	if state.ActiveTurn == nil || state.ActiveTurn.Id != turnID {
 		return ReduceOutcomeNoOp
 	}
@@ -253,6 +263,9 @@ func endTurn(state *ahptypes.ChatState, turnID string, duration int64, turnState
 			ToolCall: ahptypes.ToolCallState{Value: cancelled},
 		}})
 	}
+	if errorPart != nil {
+		parts = append(parts, ahptypes.ResponsePart{Value: errorPart})
+	}
 
 	// Defensive clamp: duration is producer-supplied and opaque to this
 	// reducer, but a negative value would be nonsensical to display.
@@ -268,7 +281,6 @@ func endTurn(state *ahptypes.ChatState, turnID string, duration int64, turnState
 		ResponseParts: parts,
 		Usage:         active.Usage,
 		State:         turnState,
-		Error:         errInfo,
 	}
 
 	state.Turns = append(state.Turns, turn)
@@ -515,6 +527,9 @@ func ApplyActionToChat(state *ahptypes.ChatState, action ahptypes.StateAction) R
 		if state.ActiveTurn == nil || state.ActiveTurn.Id != a.TurnId {
 			return ReduceOutcomeNoOp
 		}
+		if _, ok := a.Part.Value.(*ahptypes.ErrorResponsePart); ok {
+			return ReduceOutcomeNoOp
+		}
 		state.ActiveTurn.ResponseParts = append(state.ActiveTurn.ResponseParts, a.Part)
 		return ReduceOutcomeApplied
 	case *ahptypes.ChatTurnCompleteAction:
@@ -522,9 +537,54 @@ func ApplyActionToChat(state *ahptypes.ChatState, action ahptypes.StateAction) R
 	case *ahptypes.ChatTurnCancelledAction:
 		return endTurn(state, a.TurnId, a.Duration, ahptypes.TurnStateCancelled, nil, nil)
 	case *ahptypes.ChatErrorAction:
-		errCopy := a.Error
 		errStatus := ahptypes.SessionStatusError
-		return endTurn(state, a.TurnId, a.Duration, ahptypes.TurnStateError, &errStatus, &errCopy)
+		return endTurn(state, a.TurnId, a.Duration, ahptypes.TurnStateError, &errStatus, &a.Part)
+	case *ahptypes.ChatErrorRecoverySelectedAction:
+		if state.ActiveTurn != nil || len(state.Turns) == 0 {
+			return ReduceOutcomeNoOp
+		}
+		turnIndex := len(state.Turns) - 1
+		turn := state.Turns[turnIndex]
+		if turn.Id != a.TurnId || turn.State != ahptypes.TurnStateError {
+			return ReduceOutcomeNoOp
+		}
+		partIndex, recoveryPart := findAvailableErrorRecoveryPart(turn.ResponseParts, a.PartId)
+		if recoveryPart == nil {
+			return ReduceOutcomeNoOp
+		}
+		optionAvailable := false
+		for i := range recoveryPart.Recovery.Options {
+			if recoveryPart.Recovery.Options[i].Id == a.OptionId {
+				optionAvailable = true
+				break
+			}
+		}
+		if !optionAvailable {
+			return ReduceOutcomeNoOp
+		}
+		recovery := *recoveryPart.Recovery
+		selectedOptionID := a.OptionId
+		recovery.SelectedOptionId = &selectedOptionID
+		updatedPart := *recoveryPart
+		updatedPart.Recovery = &recovery
+		responseParts := append([]ahptypes.ResponsePart(nil), turn.ResponseParts...)
+		responseParts[partIndex] = ahptypes.ResponsePart{Value: &updatedPart}
+
+		startedAt := state.ModifiedAt
+		if turn.StartedAt != nil {
+			startedAt = *turn.StartedAt
+		}
+		state.Turns = state.Turns[:turnIndex]
+		state.ActiveTurn = &ahptypes.ActiveTurn{
+			Id:            turn.Id,
+			StartedAt:     startedAt,
+			Message:       turn.Message,
+			ResponseParts: responseParts,
+			Usage:         turn.Usage,
+		}
+		state.Status = withStatusFlag(summaryStatus(state, nil), ahptypes.SessionStatusIsRead, false)
+		touchChatModified(state)
+		return ReduceOutcomeApplied
 	case *ahptypes.ChatActivityChangedAction:
 		state.Activity = a.Activity
 		return ReduceOutcomeApplied

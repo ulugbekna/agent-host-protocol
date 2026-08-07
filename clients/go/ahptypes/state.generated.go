@@ -216,6 +216,7 @@ const (
 	ResponsePartKindReasoning          ResponsePartKind = "reasoning"
 	ResponsePartKindSystemNotification ResponsePartKind = "systemNotification"
 	ResponsePartKindInputRequest       ResponsePartKind = "inputRequest"
+	ResponsePartKindError              ResponsePartKind = "error"
 )
 
 // Status of a tool call in the lifecycle state machine.
@@ -1285,8 +1286,6 @@ type Turn struct {
 	Usage *UsageInfo `json:"usage,omitempty"`
 	// How the turn ended
 	State TurnState `json:"state"`
-	// Error details if state is `'error'`
-	Error *ErrorInfo `json:"error,omitempty"`
 }
 
 // An in-progress turn — the assistant is actively streaming.
@@ -1856,6 +1855,57 @@ type InputRequestResponsePart struct {
 	// How the request was resolved. Absent until a client submits `accept`,
 	// `decline`, or `cancel` with `chat/inputCompleted`.
 	Response *ChatInputResponseKind `json:"response,omitempty"`
+}
+
+// An action the host offers to recover from a turn error.
+//
+// The `id` is opaque to clients. Selecting an option with
+// `chat/errorRecoverySelected` asks the host to perform the corresponding
+// recovery, such as retrying the request or starting a quota-purchase flow.
+type ErrorRecoveryOption struct {
+	// Stable option identifier, returned in `chat/errorRecoverySelected`.
+	Id string `json:"id"`
+	// Human-readable label displayed to the user.
+	Label string `json:"label"`
+	// Optional secondary text.
+	Description *string `json:"description,omitempty"`
+	// Whether this option is the recommended/default choice.
+	Recommended *bool `json:"recommended,omitempty"`
+}
+
+// Recovery offered for an error.
+//
+// Presence of this object means the host offered recovery. `options` MUST
+// contain at least one entry with a unique `id`. Recovery is available while
+// `selectedOptionId` is absent. Once a client selects an option, the reducer
+// records its identifier and reopens the same turn. The error part remains in
+// the response stream so the failure and recovery decision stay visible in
+// history.
+type ErrorRecovery struct {
+	// Ordered recovery options supplied by the host.
+	Options []ErrorRecoveryOption `json:"options"`
+	// Identifier of the option selected by the user, absent until recovery is requested.
+	SelectedOptionId *string `json:"selectedOptionId,omitempty"`
+}
+
+// An error encountered while processing a turn.
+//
+// This is the detailed source of truth for the error. {@link Turn.state}
+// remains {@link TurnState.Error} while the turn is stopped at this error so
+// clients can detect the terminal state without inspecting response parts.
+//
+// When `recovery` is absent, the error is not recoverable. When it is present
+// and `selectedOptionId` is absent, a client may select one of its host-provided
+// options with `chat/errorRecoverySelected`.
+type ErrorResponsePart struct {
+	// Discriminant
+	Kind ResponsePartKind `json:"kind"`
+	// Stable part identifier.
+	Id string `json:"id"`
+	// Error details.
+	Error ErrorInfo `json:"error"`
+	// Recovery offered by the host, if any.
+	Recovery *ErrorRecovery `json:"recovery,omitempty"`
 }
 
 // Tool execution result details, available after execution completes.
@@ -3605,6 +3655,7 @@ func (*ToolCallResponsePart) isResponsePart()           {}
 func (*ReasoningResponsePart) isResponsePart()          {}
 func (*SystemNotificationResponsePart) isResponsePart() {}
 func (*InputRequestResponsePart) isResponsePart()       {}
+func (*ErrorResponsePart) isResponsePart()              {}
 
 // ResponsePartUnknown carries an unrecognized ResponsePart variant — typically a discriminator value introduced by a newer protocol version. The original JSON object is preserved verbatim so that re-encoding round-trips faithfully.
 type ResponsePartUnknown struct {
@@ -3652,6 +3703,12 @@ func (u *ResponsePart) UnmarshalJSON(data []byte) error {
 		u.Value = &value
 	case "inputRequest":
 		var value InputRequestResponsePart
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		u.Value = &value
+	case "error":
+		var value ErrorResponsePart
 		if err := json.Unmarshal(data, &value); err != nil {
 			return err
 		}

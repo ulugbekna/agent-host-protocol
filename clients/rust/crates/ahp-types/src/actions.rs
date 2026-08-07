@@ -16,11 +16,12 @@ use crate::state::{
     AgentInfo, AgentSelection, Annotation, AnnotationEntry, Changeset, ChangesetFile,
     ChangesetOperation, ChangesetOperationStatus, ChangesetStatus, ChatInputAnswer,
     ChatInputRequest, ChatInputResponseKind, ChatInteractivity, ChatOrigin, ChatSummary,
-    ConfirmationOption, ContentRef, Customization, ErrorInfo, McpAuthRequirement, McpServerState,
-    Message, ModelSelection, PendingMessageKind, ResponsePart, SessionActiveClient,
-    SessionInputRequest, SideChatSelection, TerminalClaim, TerminalInfo, TextRange,
-    ToolCallCancellationReason, ToolCallConfirmationReason, ToolCallContributor, ToolCallResult,
-    ToolCallRiskAssessment, ToolDefinition, ToolInput, ToolResultContent, Turn, UsageInfo,
+    ConfirmationOption, ContentRef, Customization, ErrorInfo, ErrorResponsePart,
+    McpAuthRequirement, McpServerState, Message, ModelSelection, PendingMessageKind, ResponsePart,
+    SessionActiveClient, SessionInputRequest, SideChatSelection, TerminalClaim, TerminalInfo,
+    TextRange, ToolCallCancellationReason, ToolCallConfirmationReason, ToolCallContributor,
+    ToolCallResult, ToolCallRiskAssessment, ToolDefinition, ToolInput, ToolResultContent, Turn,
+    UsageInfo,
 };
 
 // ─── ActionType ──────────────────────────────────────────────────────
@@ -74,6 +75,8 @@ pub enum ActionType {
     ChatTurnCancelled,
     #[serde(rename = "chat/error")]
     ChatError,
+    #[serde(rename = "chat/errorRecoverySelected")]
+    ChatErrorRecoverySelected,
     #[serde(rename = "chat/activityChanged")]
     ChatActivityChanged,
     #[serde(rename = "chat/workingDirectorySet")]
@@ -377,12 +380,15 @@ pub struct ChatDeltaAction {
 }
 
 /// Structured content appended to the response.
+///
+/// An {@link ErrorResponsePart} MUST be appended with {@link ChatErrorAction}
+/// instead so adding the part and ending the turn are one atomic transition.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatResponsePartAction {
     /// Turn identifier
     pub turn_id: String,
-    /// Response part (markdown or content ref)
+    /// Response part to append; error parts are ignored.
     pub part: ResponsePart,
     /// Additional provider-specific metadata for this action.
     ///
@@ -761,8 +767,9 @@ pub struct ChatErrorAction {
     /// client clocks may differ — and MUST treat it as opaque, producer-supplied
     /// data.
     pub duration: i64,
-    /// Error details
-    pub error: ErrorInfo,
+    /// Error part to append to the response stream before finalizing the turn.
+    /// Its optional recovery options describe the actions the host can perform.
+    pub part: ErrorResponsePart,
     /// Additional provider-specific metadata for this action.
     ///
     /// Clients MAY look for well-known keys here to provide enhanced UI, and
@@ -772,6 +779,22 @@ pub struct ChatErrorAction {
     /// convention.
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<JsonObject>,
+}
+
+/// A client selected one of the host-provided recovery options on an error.
+///
+/// The reducer records the selected option identifier on the existing error
+/// response part and reopens the same turn without adding another message. The
+/// host performs the opaque recovery behavior identified by `optionId`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatErrorRecoverySelectedAction {
+    /// Identifier of the errored turn.
+    pub turn_id: String,
+    /// Identifier of the error response part.
+    pub part_id: String,
+    /// Identifier of the selected recovery option.
+    pub option_id: String,
 }
 
 /// The activity description of this chat changed.
@@ -1827,6 +1850,8 @@ pub enum StateAction {
     ChatTurnCancelled(ChatTurnCancelledAction),
     #[serde(rename = "chat/error")]
     ChatError(ChatErrorAction),
+    #[serde(rename = "chat/errorRecoverySelected")]
+    ChatErrorRecoverySelected(ChatErrorRecoverySelectedAction),
     #[serde(rename = "chat/activityChanged")]
     ChatActivityChanged(ChatActivityChangedAction),
     #[serde(rename = "session/titleChanged")]
