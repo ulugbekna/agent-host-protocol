@@ -98,7 +98,7 @@ extension ResponsePart {
         case .contentRef: return nil
         case .systemNotification: return nil
         case .inputRequest: return nil
-        case .error(let error): return error.id
+        case .error: return nil
         case .unknown: return nil
         }
     }
