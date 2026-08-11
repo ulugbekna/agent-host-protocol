@@ -1,5 +1,5 @@
 {
-  "description": "a recovered turn keeps its prior error and selection when it errors again",
+  "description": "a resumed turn preserves its prior error when it errors again",
   "reducer": "chat",
   "initial": {
     "turns": [],
@@ -27,26 +27,16 @@
       "duration": 1000,
       "part": {
         "kind": "error",
-        "id": "error-1",
         "error": {
           "errorType": "runtime",
           "message": "First failure"
         },
-        "recovery": {
-          "options": [
-            {
-              "id": "retry",
-              "label": "Try Again"
-            }
-          ]
-        }
+        "resumable": true
       }
     },
     {
-      "type": "chat/errorRecoverySelected",
-      "turnId": "turn-1",
-      "partId": "error-1",
-      "optionId": "retry"
+      "type": "chat/turnResume",
+      "turnId": "turn-1"
     },
     {
       "type": "chat/error",
@@ -54,7 +44,6 @@
       "duration": 2000,
       "part": {
         "kind": "error",
-        "id": "error-2",
         "error": {
           "errorType": "fatal",
           "message": "Second failure"
@@ -77,24 +66,14 @@
         "responseParts": [
           {
             "kind": "error",
-            "id": "error-1",
             "error": {
               "errorType": "runtime",
               "message": "First failure"
             },
-            "recovery": {
-              "options": [
-                {
-                  "id": "retry",
-                  "label": "Try Again"
-                }
-              ],
-              "selectedOptionId": "retry"
-            }
+            "resumable": true
           },
           {
             "kind": "error",
-            "id": "error-2",
             "error": {
               "errorType": "fatal",
               "message": "Second failure"

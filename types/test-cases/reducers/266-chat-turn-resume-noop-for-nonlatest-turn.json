@@ -1,14 +1,12 @@
 {
-  "description": "a recovered turn completes as one turn while preserving its error and recovery decision",
+  "description": "chat/turnResume does nothing when the errored turn is not latest",
   "reducer": "chat",
   "initial": {
     "turns": [
       {
         "id": "turn-1",
-        "startedAt": "1970-01-01T00:00:01.000Z",
-        "duration": 1000,
         "message": {
-          "text": "Hello",
+          "text": "First",
           "origin": {
             "kind": "user"
           }
@@ -16,51 +14,46 @@
         "responseParts": [
           {
             "kind": "error",
-            "id": "error-1",
             "error": {
               "errorType": "runtime",
               "message": "Something broke"
             },
-            "recovery": {
-              "options": [
-                {
-                  "id": "retry",
-                  "label": "Try Again"
-                }
-              ]
-            }
+            "resumable": true
           }
         ],
         "usage": null,
         "state": "error"
+      },
+      {
+        "id": "turn-2",
+        "message": {
+          "text": "Second",
+          "origin": {
+            "kind": "user"
+          }
+        },
+        "responseParts": [],
+        "usage": null,
+        "state": "complete"
       }
     ],
     "resource": "copilot:/test-session",
     "title": "Test Session",
-    "status": 2,
+    "status": 1,
     "modifiedAt": "1970-01-01T00:00:02.000Z"
   },
   "actions": [
     {
-      "type": "chat/errorRecoverySelected",
-      "turnId": "turn-1",
-      "partId": "error-1",
-      "optionId": "retry"
-    },
-    {
-      "type": "chat/turnComplete",
-      "turnId": "turn-1",
-      "duration": 2000
+      "type": "chat/turnResume",
+      "turnId": "turn-1"
     }
   ],
   "expected": {
     "turns": [
       {
         "id": "turn-1",
-        "startedAt": "1970-01-01T00:00:01.000Z",
-        "duration": 2000,
         "message": {
-          "text": "Hello",
+          "text": "First",
           "origin": {
             "kind": "user"
           }
@@ -68,30 +61,32 @@
         "responseParts": [
           {
             "kind": "error",
-            "id": "error-1",
             "error": {
               "errorType": "runtime",
               "message": "Something broke"
             },
-            "recovery": {
-              "options": [
-                {
-                  "id": "retry",
-                  "label": "Try Again"
-                }
-              ],
-              "selectedOptionId": "retry"
-            }
+            "resumable": true
           }
         ],
+        "usage": null,
+        "state": "error"
+      },
+      {
+        "id": "turn-2",
+        "message": {
+          "text": "Second",
+          "origin": {
+            "kind": "user"
+          }
+        },
+        "responseParts": [],
         "usage": null,
         "state": "complete"
       }
     ],
-    "activeTurn": null,
     "resource": "copilot:/test-session",
     "title": "Test Session",
     "status": 1,
-    "modifiedAt": "1970-01-01T00:00:09.999Z"
+    "modifiedAt": "1970-01-01T00:00:02.000Z"
   }
 }

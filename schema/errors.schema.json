@@ -3469,76 +3469,24 @@
         "request"
       ]
     },
-    "ErrorRecoveryOption": {
-      "type": "object",
-      "description": "An action the host offers to recover from a turn error.\n\nThe `id` is opaque to clients. Selecting an option with\n`chat/errorRecoverySelected` asks the host to perform the corresponding\nrecovery, such as retrying the request or starting a quota-purchase flow.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Stable option identifier, returned in `chat/errorRecoverySelected`."
-        },
-        "label": {
-          "type": "string",
-          "description": "Human-readable label displayed to the user."
-        },
-        "description": {
-          "type": "string",
-          "description": "Optional secondary text."
-        },
-        "recommended": {
-          "type": "boolean",
-          "description": "Whether this option is the recommended/default choice."
-        }
-      },
-      "required": [
-        "id",
-        "label"
-      ]
-    },
-    "ErrorRecovery": {
-      "type": "object",
-      "description": "Recovery offered for an error.\n\nPresence of this object means the host offered recovery. `options` MUST\ncontain at least one entry with a unique `id`. Recovery is available while\n`selectedOptionId` is absent. Once a client selects an option, the reducer\nrecords its identifier and reopens the same turn. The error part remains in\nthe response stream so the failure and recovery decision stay visible in\nhistory.",
-      "properties": {
-        "options": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ErrorRecoveryOption"
-          },
-          "description": "Ordered recovery options supplied by the host."
-        },
-        "selectedOptionId": {
-          "type": "string",
-          "description": "Identifier of the option selected by the user, absent until recovery is requested."
-        }
-      },
-      "required": [
-        "options"
-      ]
-    },
     "ErrorResponsePart": {
       "type": "object",
-      "description": "An error encountered while processing a turn.\n\nThis is the detailed source of truth for the error. {@link Turn.state}\nremains {@link TurnState.Error} while the turn is stopped at this error so\nclients can detect the terminal state without inspecting response parts.\n\nWhen `recovery` is absent, the error is not recoverable. When it is present\nand `selectedOptionId` is absent, a client may select one of its host-provided\noptions with `chat/errorRecoverySelected`.",
+      "description": "An error encountered while processing a turn.\n\nThis is the detailed source of truth for the error. {@link Turn.state}\nremains {@link TurnState.Error} while the turn is stopped at this error so\nclients can detect the terminal state without inspecting response parts.\n\nWhen {@link resumable} is present, a client may dispatch `chat/turnResume`\nwhile this is the latest turn and its state is {@link TurnState.Error}.\nClients decide whether and how to present that affordance.",
       "properties": {
         "kind": {
           "const": "error",
           "description": "Discriminant"
         },
-        "id": {
-          "type": "string",
-          "description": "Stable part identifier."
-        },
         "error": {
           "$ref": "#/$defs/ErrorInfo",
           "description": "Error details."
         },
-        "recovery": {
-          "$ref": "#/$defs/ErrorRecovery",
-          "description": "Recovery offered by the host, if any."
+        "resumable": {
+          "description": "Whether the host can resume the turn from this error."
         }
       },
       "required": [
         "kind",
-        "id",
         "error"
       ]
     },
@@ -7293,7 +7241,7 @@
           "$ref": "#/$defs/ChatErrorAction"
         },
         {
-          "$ref": "#/$defs/ChatErrorRecoverySelectedAction"
+          "$ref": "#/$defs/ChatTurnResumeAction"
         },
         {
           "$ref": "#/$defs/ChatActivityChangedAction"
@@ -8629,7 +8577,7 @@
         },
         "part": {
           "$ref": "#/$defs/ErrorResponsePart",
-          "description": "Error part to append to the response stream before finalizing the turn.\nIts optional recovery options describe the actions the host can perform."
+          "description": "Error part to append to the response stream before finalizing the turn.\nIts optional `resumable` flag indicates whether the turn can be resumed."
         },
         "_meta": {
           "type": "object",
@@ -8644,31 +8592,21 @@
         "part"
       ]
     },
-    "ChatErrorRecoverySelectedAction": {
+    "ChatTurnResumeAction": {
       "type": "object",
-      "description": "A client selected one of the host-provided recovery options on an error.\n\nThe reducer records the selected option identifier on the existing error\nresponse part and reopens the same turn without adding another message. The\nhost performs the opaque recovery behavior identified by `optionId`.",
+      "description": "Resumes the latest errored turn without adding another message.\n\nThe turn MUST be the latest turn, its state MUST be `error`, and its final\nresponse part MUST be a resumable error. The reducer reopens the same turn\nwith its existing message, response parts, and usage intact. The host then\nresumes the provider's execution for that turn.",
       "properties": {
         "type": {
-          "const": "chat/errorRecoverySelected"
+          "const": "chat/turnResume"
         },
         "turnId": {
           "type": "string",
           "description": "Identifier of the errored turn."
-        },
-        "partId": {
-          "type": "string",
-          "description": "Identifier of the error response part."
-        },
-        "optionId": {
-          "type": "string",
-          "description": "Identifier of the selected recovery option."
         }
       },
       "required": [
         "type",
-        "turnId",
-        "partId",
-        "optionId"
+        "turnId"
       ]
     },
     "ChatActivityChangedAction": {

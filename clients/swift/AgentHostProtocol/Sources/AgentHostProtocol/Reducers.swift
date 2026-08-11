@@ -181,28 +181,16 @@ public func chatReducer(state: ChatState, action: StateAction) -> ChatState {
     case .chatError(let a):
         return endTurn(state: state, turnId: a.turnId, duration: a.duration, turnState: .error, terminalStatus: .error, errorPart: a.part)
 
-    case .chatErrorRecoverySelected(let a):
+    case .chatTurnResume(let a):
         guard state.activeTurn == nil,
               let turn = state.turns.last,
               turn.id == a.turnId,
               turn.state == .error,
-              let recoveryPartIndex = turn.responseParts.firstIndex(where: { part in
-                  guard case .error(let errorPart) = part else { return false }
-                  return errorPart.id == a.partId
-                      && errorPart.recovery != nil
-                      && errorPart.recovery?.selectedOptionId == nil
-              }),
-              case .error(var errorPart) = turn.responseParts[recoveryPartIndex],
-              var recovery = errorPart.recovery,
-              recovery.options.contains(where: { $0.id == a.optionId })
+              case .error(let errorPart) = turn.responseParts.last,
+              errorPart.resumable == true
         else {
             return state
         }
-
-        recovery.selectedOptionId = a.optionId
-        errorPart.recovery = recovery
-        var responseParts = turn.responseParts
-        responseParts[recoveryPartIndex] = .error(errorPart)
 
         var next = state
         next.turns.removeLast()
@@ -210,7 +198,7 @@ public func chatReducer(state: ChatState, action: StateAction) -> ChatState {
             id: turn.id,
             startedAt: turn.startedAt ?? state.modifiedAt,
             message: turn.message,
-            responseParts: responseParts,
+            responseParts: turn.responseParts,
             usage: turn.usage
         )
         next.status = withStatusFlag(chatSummaryStatus(next), .isRead, false)
@@ -923,7 +911,7 @@ public func sessionReducer(state: SessionState, action: StateAction) -> SessionS
 /// Set of action types that clients are allowed to dispatch.
 public let clientDispatchableActions: Set<String> = [
     "chat/turnStarted",
-    "chat/errorRecoverySelected",
+    "chat/turnResume",
     "chat/toolCallConfirmed",
     "chat/toolCallComplete",
     "chat/toolCallResultConfirmed",
@@ -945,7 +933,7 @@ public let clientDispatchableActions: Set<String> = [
 /// Checks whether an action may be dispatched by a client.
 public func isClientDispatchable(_ action: StateAction) -> Bool {
     switch action {
-    case .chatTurnStarted, .chatErrorRecoverySelected,
+    case .chatTurnStarted, .chatTurnResume,
          .chatToolCallConfirmed, .chatToolCallComplete,
          .chatToolCallResultConfirmed, .chatTurnCancelled,
          .sessionActiveClientSet,

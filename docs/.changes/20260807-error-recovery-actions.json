@@ -1,4 +1,0 @@
-{
-  "type": "changed",
-  "message": "Turn errors are durable response parts with optional host-provided recovery actions selected through `chat/errorRecoverySelected`."
-}

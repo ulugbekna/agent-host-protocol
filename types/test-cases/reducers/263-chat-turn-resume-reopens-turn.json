@@ -1,5 +1,5 @@
 {
-  "description": "chat/errorRecoverySelected records the selected host option and reopens the same turn",
+  "description": "chat/turnResume reopens the latest turn after a resumable error",
   "reducer": "chat",
   "initial": {
     "turns": [
@@ -21,25 +21,11 @@
           },
           {
             "kind": "error",
-            "id": "error-1",
             "error": {
               "errorType": "quota",
               "message": "More tokens are required"
             },
-            "recovery": {
-              "options": [
-                {
-                  "id": "retry",
-                  "label": "Try Again"
-                },
-                {
-                  "id": "buy-tokens",
-                  "label": "Buy More Tokens",
-                  "description": "Increase the available quota",
-                  "recommended": true
-                }
-              ]
-            }
+            "resumable": true
           }
         ],
         "usage": null,
@@ -53,10 +39,8 @@
   },
   "actions": [
     {
-      "type": "chat/errorRecoverySelected",
-      "turnId": "turn-1",
-      "partId": "error-1",
-      "optionId": "buy-tokens"
+      "type": "chat/turnResume",
+      "turnId": "turn-1"
     }
   ],
   "expected": {
@@ -78,26 +62,11 @@
         },
         {
           "kind": "error",
-          "id": "error-1",
           "error": {
             "errorType": "quota",
             "message": "More tokens are required"
           },
-          "recovery": {
-            "options": [
-              {
-                "id": "retry",
-                "label": "Try Again"
-              },
-              {
-                "id": "buy-tokens",
-                "label": "Buy More Tokens",
-                "description": "Increase the available quota",
-                "recommended": true
-              }
-            ],
-            "selectedOptionId": "buy-tokens"
-          }
+          "resumable": true
         }
       ],
       "usage": null

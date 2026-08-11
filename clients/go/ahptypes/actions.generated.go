@@ -42,7 +42,7 @@ const (
 	ActionTypeChatTurnComplete                  ActionType = "chat/turnComplete"
 	ActionTypeChatTurnCancelled                 ActionType = "chat/turnCancelled"
 	ActionTypeChatError                         ActionType = "chat/error"
-	ActionTypeChatErrorRecoverySelected         ActionType = "chat/errorRecoverySelected"
+	ActionTypeChatTurnResume                    ActionType = "chat/turnResume"
 	ActionTypeChatActivityChanged               ActionType = "chat/activityChanged"
 	ActionTypeChatWorkingDirectorySet           ActionType = "chat/workingDirectorySet"
 	ActionTypeChatWorkingDirectoryRemoved       ActionType = "chat/workingDirectoryRemoved"
@@ -594,7 +594,7 @@ type ChatErrorAction struct {
 	// data.
 	Duration int64 `json:"duration"`
 	// Error part to append to the response stream before finalizing the turn.
-	// Its optional recovery options describe the actions the host can perform.
+	// Its optional `resumable` flag indicates whether the turn can be resumed.
 	Part ErrorResponsePart `json:"part"`
 	// Additional provider-specific metadata for this action.
 	//
@@ -606,19 +606,16 @@ type ChatErrorAction struct {
 	Meta map[string]json.RawMessage `json:"_meta,omitempty"`
 }
 
-// A client selected one of the host-provided recovery options on an error.
+// Resumes the latest errored turn without adding another message.
 //
-// The reducer records the selected option identifier on the existing error
-// response part and reopens the same turn without adding another message. The
-// host performs the opaque recovery behavior identified by `optionId`.
-type ChatErrorRecoverySelectedAction struct {
+// The turn MUST be the latest turn, its state MUST be `error`, and its final
+// response part MUST be a resumable error. The reducer reopens the same turn
+// with its existing message, response parts, and usage intact. The host then
+// resumes the provider's execution for that turn.
+type ChatTurnResumeAction struct {
 	Type ActionType `json:"type"`
 	// Identifier of the errored turn.
 	TurnId string `json:"turnId"`
-	// Identifier of the error response part.
-	PartId string `json:"partId"`
-	// Identifier of the selected recovery option.
-	OptionId string `json:"optionId"`
 }
 
 // The activity description of this chat changed.
@@ -1535,7 +1532,7 @@ func (*ChatToolCallAuthResolvedAction) isStateAction()          {}
 func (*ChatTurnCompleteAction) isStateAction()                  {}
 func (*ChatTurnCancelledAction) isStateAction()                 {}
 func (*ChatErrorAction) isStateAction()                         {}
-func (*ChatErrorRecoverySelectedAction) isStateAction()         {}
+func (*ChatTurnResumeAction) isStateAction()                    {}
 func (*ChatActivityChangedAction) isStateAction()               {}
 func (*SessionTitleChangedAction) isStateAction()               {}
 func (*ChatUsageAction) isStateAction()                         {}
@@ -1756,8 +1753,8 @@ func (u *StateAction) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		u.Value = &value
-	case "chat/errorRecoverySelected":
-		var value ChatErrorRecoverySelectedAction
+	case "chat/turnResume":
+		var value ChatTurnResumeAction
 		if err := json.Unmarshal(data, &value); err != nil {
 			return err
 		}

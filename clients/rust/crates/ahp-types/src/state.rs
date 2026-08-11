@@ -2284,63 +2284,23 @@ pub struct InputRequestResponsePart {
     pub response: Option<ChatInputResponseKind>,
 }
 
-/// An action the host offers to recover from a turn error.
-///
-/// The `id` is opaque to clients. Selecting an option with
-/// `chat/errorRecoverySelected` asks the host to perform the corresponding
-/// recovery, such as retrying the request or starting a quota-purchase flow.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ErrorRecoveryOption {
-    /// Stable option identifier, returned in `chat/errorRecoverySelected`.
-    pub id: String,
-    /// Human-readable label displayed to the user.
-    pub label: String,
-    /// Optional secondary text.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    /// Whether this option is the recommended/default choice.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recommended: Option<bool>,
-}
-
-/// Recovery offered for an error.
-///
-/// Presence of this object means the host offered recovery. `options` MUST
-/// contain at least one entry with a unique `id`. Recovery is available while
-/// `selectedOptionId` is absent. Once a client selects an option, the reducer
-/// records its identifier and reopens the same turn. The error part remains in
-/// the response stream so the failure and recovery decision stay visible in
-/// history.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ErrorRecovery {
-    /// Ordered recovery options supplied by the host.
-    pub options: Vec<ErrorRecoveryOption>,
-    /// Identifier of the option selected by the user, absent until recovery is requested.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selected_option_id: Option<String>,
-}
-
 /// An error encountered while processing a turn.
 ///
 /// This is the detailed source of truth for the error. {@link Turn.state}
 /// remains {@link TurnState.Error} while the turn is stopped at this error so
 /// clients can detect the terminal state without inspecting response parts.
 ///
-/// When `recovery` is absent, the error is not recoverable. When it is present
-/// and `selectedOptionId` is absent, a client may select one of its host-provided
-/// options with `chat/errorRecoverySelected`.
+/// When {@link resumable} is present, a client may dispatch `chat/turnResume`
+/// while this is the latest turn and its state is {@link TurnState.Error}.
+/// Clients decide whether and how to present that affordance.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorResponsePart {
-    /// Stable part identifier.
-    pub id: String,
     /// Error details.
     pub error: ErrorInfo,
-    /// Recovery offered by the host, if any.
+    /// Whether the host can resume the turn from this error.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recovery: Option<ErrorRecovery>,
+    pub resumable: Option<bool>,
 }
 
 /// Tool execution result details, available after execution completes.

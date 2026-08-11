@@ -494,7 +494,7 @@ export interface ChatErrorAction {
   duration: number;
   /**
    * Error part to append to the response stream before finalizing the turn.
-   * Its optional recovery options describe the actions the host can perform.
+   * Its optional `resumable` flag indicates whether the turn can be resumed.
    */
   part: ErrorResponsePart;
   /**
@@ -510,24 +510,21 @@ export interface ChatErrorAction {
 }
 
 /**
- * A client selected one of the host-provided recovery options on an error.
+ * Resumes the latest errored turn without adding another message.
  *
- * The reducer records the selected option identifier on the existing error
- * response part and reopens the same turn without adding another message. The
- * host performs the opaque recovery behavior identified by `optionId`.
+ * The turn MUST be the latest turn, its state MUST be `error`, and its final
+ * response part MUST be a resumable error. The reducer reopens the same turn
+ * with its existing message, response parts, and usage intact. The host then
+ * resumes the provider's execution for that turn.
  *
  * @category Chat Actions
  * @version 1
  * @clientDispatchable
  */
-export interface ChatErrorRecoverySelectedAction {
-  type: ActionType.ChatErrorRecoverySelected;
+export interface ChatTurnResumeAction {
+  type: ActionType.ChatTurnResume;
   /** Identifier of the errored turn. */
   turnId: string;
-  /** Identifier of the error response part. */
-  partId: string;
-  /** Identifier of the selected recovery option. */
-  optionId: string;
 }
 
 /**
@@ -849,7 +846,7 @@ export type ChatAction =
   | ChatTurnCompleteAction
   | ChatTurnCancelledAction
   | ChatErrorAction
-  | ChatErrorRecoverySelectedAction
+  | ChatTurnResumeAction
   | ChatActivityChangedAction
   | ChatWorkingDirectorySetAction
   | ChatWorkingDirectoryRemovedAction

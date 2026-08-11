@@ -599,8 +599,8 @@ where
             ResponsePart::ToolCall(tc) => Some(tool_call_id(&tc.tool_call).to_owned()),
             ResponsePart::Markdown(m) => Some(m.id.clone()),
             ResponsePart::Reasoning(r) => Some(r.id.clone()),
-            ResponsePart::Error(error) => Some(error.id.clone()),
-            ResponsePart::ContentRef(_)
+            ResponsePart::Error(_)
+            | ResponsePart::ContentRef(_)
             | ResponsePart::SystemNotification(_)
             | ResponsePart::InputRequest(_)
             | ResponsePart::Unknown(_) => None,
@@ -1001,7 +1001,7 @@ pub fn apply_action_to_chat(state: &mut ChatState, action: &StateAction) -> Redu
             Some(SessionStatus::Error),
             Some(a.part.clone()),
         ),
-        StateAction::ChatErrorRecoverySelected(a) => {
+        StateAction::ChatTurnResume(a) => {
             if state.active_turn.is_some() {
                 return ReduceOutcome::NoOp;
             }
@@ -1011,23 +1011,12 @@ pub fn apply_action_to_chat(state: &mut ChatState, action: &StateAction) -> Redu
             if turn.id != a.turn_id || turn.state != TurnState::Error {
                 return ReduceOutcome::NoOp;
             }
-            let Some(recovery) = turn.response_parts.iter_mut().find_map(|part| match part {
-                ResponsePart::Error(error) if error.id == a.part_id => error
-                    .recovery
-                    .as_mut()
-                    .filter(|recovery| recovery.selected_option_id.is_none()),
-                _ => None,
-            }) else {
+            let Some(ResponsePart::Error(error)) = turn.response_parts.last() else {
                 return ReduceOutcome::NoOp;
             };
-            if !recovery
-                .options
-                .iter()
-                .any(|option| option.id == a.option_id)
-            {
+            if error.resumable != Some(true) {
                 return ReduceOutcome::NoOp;
             }
-            recovery.selected_option_id = Some(a.option_id.clone());
 
             let turn = state.turns.pop().unwrap();
             state.active_turn = Some(ActiveTurn {

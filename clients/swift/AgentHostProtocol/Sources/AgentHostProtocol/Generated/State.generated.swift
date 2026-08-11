@@ -2527,64 +2527,22 @@ public struct InputRequestResponsePart: Codable, Sendable {
     }
 }
 
-public struct ErrorRecoveryOption: Codable, Sendable {
-    /// Stable option identifier, returned in `chat/errorRecoverySelected`.
-    public var id: String
-    /// Human-readable label displayed to the user.
-    public var label: String
-    /// Optional secondary text.
-    public var description: String?
-    /// Whether this option is the recommended/default choice.
-    public var recommended: Bool?
-
-    public init(
-        id: String,
-        label: String,
-        description: String? = nil,
-        recommended: Bool? = nil
-    ) {
-        self.id = id
-        self.label = label
-        self.description = description
-        self.recommended = recommended
-    }
-}
-
-public struct ErrorRecovery: Codable, Sendable {
-    /// Ordered recovery options supplied by the host.
-    public var options: [ErrorRecoveryOption]
-    /// Identifier of the option selected by the user, absent until recovery is requested.
-    public var selectedOptionId: String?
-
-    public init(
-        options: [ErrorRecoveryOption],
-        selectedOptionId: String? = nil
-    ) {
-        self.options = options
-        self.selectedOptionId = selectedOptionId
-    }
-}
-
 public struct ErrorResponsePart: Codable, Sendable {
     /// Discriminant
     public var kind: ResponsePartKind
-    /// Stable part identifier.
-    public var id: String
     /// Error details.
     public var error: ErrorInfo
-    /// Recovery offered by the host, if any.
-    public var recovery: ErrorRecovery?
+    /// Whether the host can resume the turn from this error.
+    public var resumable: Bool?
 
     public init(
         kind: ResponsePartKind,
-        id: String,
         error: ErrorInfo,
-        recovery: ErrorRecovery? = nil
+        resumable: Bool? = nil
     ) {
         self.kind = kind
-        self.id = id
         self.error = error
-        self.recovery = recovery
+        self.resumable = resumable
     }
 }
 

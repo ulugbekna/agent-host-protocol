@@ -75,8 +75,8 @@ pub enum ActionType {
     ChatTurnCancelled,
     #[serde(rename = "chat/error")]
     ChatError,
-    #[serde(rename = "chat/errorRecoverySelected")]
-    ChatErrorRecoverySelected,
+    #[serde(rename = "chat/turnResume")]
+    ChatTurnResume,
     #[serde(rename = "chat/activityChanged")]
     ChatActivityChanged,
     #[serde(rename = "chat/workingDirectorySet")]
@@ -768,7 +768,7 @@ pub struct ChatErrorAction {
     /// data.
     pub duration: i64,
     /// Error part to append to the response stream before finalizing the turn.
-    /// Its optional recovery options describe the actions the host can perform.
+    /// Its optional `resumable` flag indicates whether the turn can be resumed.
     pub part: ErrorResponsePart,
     /// Additional provider-specific metadata for this action.
     ///
@@ -781,20 +781,17 @@ pub struct ChatErrorAction {
     pub meta: Option<JsonObject>,
 }
 
-/// A client selected one of the host-provided recovery options on an error.
+/// Resumes the latest errored turn without adding another message.
 ///
-/// The reducer records the selected option identifier on the existing error
-/// response part and reopens the same turn without adding another message. The
-/// host performs the opaque recovery behavior identified by `optionId`.
+/// The turn MUST be the latest turn, its state MUST be `error`, and its final
+/// response part MUST be a resumable error. The reducer reopens the same turn
+/// with its existing message, response parts, and usage intact. The host then
+/// resumes the provider's execution for that turn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatErrorRecoverySelectedAction {
+pub struct ChatTurnResumeAction {
     /// Identifier of the errored turn.
     pub turn_id: String,
-    /// Identifier of the error response part.
-    pub part_id: String,
-    /// Identifier of the selected recovery option.
-    pub option_id: String,
 }
 
 /// The activity description of this chat changed.
@@ -1850,8 +1847,8 @@ pub enum StateAction {
     ChatTurnCancelled(ChatTurnCancelledAction),
     #[serde(rename = "chat/error")]
     ChatError(ChatErrorAction),
-    #[serde(rename = "chat/errorRecoverySelected")]
-    ChatErrorRecoverySelected(ChatErrorRecoverySelectedAction),
+    #[serde(rename = "chat/turnResume")]
+    ChatTurnResume(ChatTurnResumeAction),
     #[serde(rename = "chat/activityChanged")]
     ChatActivityChanged(ChatActivityChangedAction),
     #[serde(rename = "session/titleChanged")]

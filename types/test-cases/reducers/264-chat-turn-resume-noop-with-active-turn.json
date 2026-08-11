@@ -1,5 +1,5 @@
 {
-  "description": "chat/errorRecoverySelected is a no-op while a turn is active",
+  "description": "chat/turnResume does nothing while a turn is active",
   "reducer": "chat",
   "initial": {
     "turns": [],
@@ -22,10 +22,8 @@
   },
   "actions": [
     {
-      "type": "chat/errorRecoverySelected",
-      "turnId": "turn-1",
-      "partId": "error-1",
-      "optionId": "retry"
+      "type": "chat/turnResume",
+      "turnId": "turn-1"
     }
   ],
   "expected": {

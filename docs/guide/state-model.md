@@ -348,15 +348,11 @@ InputRequestResponsePart {
   response: ChatInputResponseKind  // 'accept' | 'decline' | 'cancel'
 }
 
-// Durable error and recovery record
+// Durable error record
 ErrorResponsePart {
   kind: 'error'
-  id: string
   error: ErrorInfo
-  recovery?: {
-    options: ErrorRecoveryOption[]       // host-provided actions
-    selectedOptionId?: string            // durable user decision
-  }
+  resumable?: true
 }
 ```
 
@@ -368,12 +364,10 @@ Clients fetch `ContentRef` content separately via the `resourceRead(uri)` comman
 
 Consumers can derive display text by concatenating all `markdown` parts, find tool calls by filtering for `toolCall` parts, and access reasoning by filtering for `reasoning` parts.
 
-An error part without `recovery` is unrecoverable. When recovery is present and
-`selectedOptionId` is absent, clients render its ordered options and dispatch
-`chat/errorRecoverySelected` with the turn, part, and option identifiers. The
-reducer records the selected option ID on the part and reopens the same turn
-without adding a user message. If processing fails again, the host appends
-another error part; prior errors and selections remain in stream order.
+When the latest errored turn ends in an error part with `resumable: true`, a
+client may dispatch `chat/turnResume`. The reducer reopens the same turn without
+adding a user message. If processing fails again, the host appends another
+error part; prior errors remain in stream order.
 
 ## Tool Call Lifecycle
 

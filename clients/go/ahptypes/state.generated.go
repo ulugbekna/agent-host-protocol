@@ -1857,55 +1857,22 @@ type InputRequestResponsePart struct {
 	Response *ChatInputResponseKind `json:"response,omitempty"`
 }
 
-// An action the host offers to recover from a turn error.
-//
-// The `id` is opaque to clients. Selecting an option with
-// `chat/errorRecoverySelected` asks the host to perform the corresponding
-// recovery, such as retrying the request or starting a quota-purchase flow.
-type ErrorRecoveryOption struct {
-	// Stable option identifier, returned in `chat/errorRecoverySelected`.
-	Id string `json:"id"`
-	// Human-readable label displayed to the user.
-	Label string `json:"label"`
-	// Optional secondary text.
-	Description *string `json:"description,omitempty"`
-	// Whether this option is the recommended/default choice.
-	Recommended *bool `json:"recommended,omitempty"`
-}
-
-// Recovery offered for an error.
-//
-// Presence of this object means the host offered recovery. `options` MUST
-// contain at least one entry with a unique `id`. Recovery is available while
-// `selectedOptionId` is absent. Once a client selects an option, the reducer
-// records its identifier and reopens the same turn. The error part remains in
-// the response stream so the failure and recovery decision stay visible in
-// history.
-type ErrorRecovery struct {
-	// Ordered recovery options supplied by the host.
-	Options []ErrorRecoveryOption `json:"options"`
-	// Identifier of the option selected by the user, absent until recovery is requested.
-	SelectedOptionId *string `json:"selectedOptionId,omitempty"`
-}
-
 // An error encountered while processing a turn.
 //
 // This is the detailed source of truth for the error. {@link Turn.state}
 // remains {@link TurnState.Error} while the turn is stopped at this error so
 // clients can detect the terminal state without inspecting response parts.
 //
-// When `recovery` is absent, the error is not recoverable. When it is present
-// and `selectedOptionId` is absent, a client may select one of its host-provided
-// options with `chat/errorRecoverySelected`.
+// When {@link resumable} is present, a client may dispatch `chat/turnResume`
+// while this is the latest turn and its state is {@link TurnState.Error}.
+// Clients decide whether and how to present that affordance.
 type ErrorResponsePart struct {
 	// Discriminant
 	Kind ResponsePartKind `json:"kind"`
-	// Stable part identifier.
-	Id string `json:"id"`
 	// Error details.
 	Error ErrorInfo `json:"error"`
-	// Recovery offered by the host, if any.
-	Recovery *ErrorRecovery `json:"recovery,omitempty"`
+	// Whether the host can resume the turn from this error.
+	Resumable *bool `json:"resumable,omitempty"`
 }
 
 // Tool execution result details, available after execution completes.

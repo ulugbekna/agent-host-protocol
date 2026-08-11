@@ -190,14 +190,12 @@ func hasOpenInputRequest(state *ahptypes.ChatState) bool {
 	return false
 }
 
-func findAvailableErrorRecoveryPart(responseParts []ahptypes.ResponsePart, partID string) (int, *ahptypes.ErrorResponsePart) {
-	for i := range responseParts {
-		part, ok := responseParts[i].Value.(*ahptypes.ErrorResponsePart)
-		if ok && part.Id == partID && part.Recovery != nil && part.Recovery.SelectedOptionId == nil {
-			return i, part
-		}
+func hasResumableError(turn *ahptypes.Turn) bool {
+	if len(turn.ResponseParts) == 0 {
+		return false
 	}
-	return -1, nil
+	part, ok := turn.ResponseParts[len(turn.ResponseParts)-1].Value.(*ahptypes.ErrorResponsePart)
+	return ok && part.Resumable != nil && *part.Resumable
 }
 
 func summaryStatus(state *ahptypes.ChatState, terminal *ahptypes.SessionStatus) ahptypes.SessionStatus {
@@ -539,36 +537,15 @@ func ApplyActionToChat(state *ahptypes.ChatState, action ahptypes.StateAction) R
 	case *ahptypes.ChatErrorAction:
 		errStatus := ahptypes.SessionStatusError
 		return endTurn(state, a.TurnId, a.Duration, ahptypes.TurnStateError, &errStatus, &a.Part)
-	case *ahptypes.ChatErrorRecoverySelectedAction:
+	case *ahptypes.ChatTurnResumeAction:
 		if state.ActiveTurn != nil || len(state.Turns) == 0 {
 			return ReduceOutcomeNoOp
 		}
 		turnIndex := len(state.Turns) - 1
 		turn := state.Turns[turnIndex]
-		if turn.Id != a.TurnId || turn.State != ahptypes.TurnStateError {
+		if turn.Id != a.TurnId || turn.State != ahptypes.TurnStateError || !hasResumableError(&turn) {
 			return ReduceOutcomeNoOp
 		}
-		partIndex, recoveryPart := findAvailableErrorRecoveryPart(turn.ResponseParts, a.PartId)
-		if recoveryPart == nil {
-			return ReduceOutcomeNoOp
-		}
-		optionAvailable := false
-		for i := range recoveryPart.Recovery.Options {
-			if recoveryPart.Recovery.Options[i].Id == a.OptionId {
-				optionAvailable = true
-				break
-			}
-		}
-		if !optionAvailable {
-			return ReduceOutcomeNoOp
-		}
-		recovery := *recoveryPart.Recovery
-		selectedOptionID := a.OptionId
-		recovery.SelectedOptionId = &selectedOptionID
-		updatedPart := *recoveryPart
-		updatedPart.Recovery = &recovery
-		responseParts := append([]ahptypes.ResponsePart(nil), turn.ResponseParts...)
-		responseParts[partIndex] = ahptypes.ResponsePart{Value: &updatedPart}
 
 		startedAt := state.ModifiedAt
 		if turn.StartedAt != nil {
@@ -579,7 +556,7 @@ func ApplyActionToChat(state *ahptypes.ChatState, action ahptypes.StateAction) R
 			Id:            turn.Id,
 			StartedAt:     startedAt,
 			Message:       turn.Message,
-			ResponseParts: responseParts,
+			ResponseParts: turn.ResponseParts,
 			Usage:         turn.Usage,
 		}
 		state.Status = withStatusFlag(summaryStatus(state, nil), ahptypes.SessionStatusIsRead, false)

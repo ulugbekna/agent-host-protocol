@@ -93,11 +93,9 @@ final class ReducersTests: XCTestCase {
                 type: .chatTurnStarted, turnId: T, startedAt: "2026-07-09T20:00:00.000Z",
                 message: Message(text: "Hello", origin: MessageOrigin(kind: .user))
             )),
-            .chatErrorRecoverySelected(ChatErrorRecoverySelectedAction(
-                type: .chatErrorRecoverySelected,
-                turnId: T,
-                partId: "error-1",
-                optionId: "retry"
+            .chatTurnResume(ChatTurnResumeAction(
+                type: .chatTurnResume,
+                turnId: T
             )),
         ]
         XCTAssertTrue(actions.allSatisfy(isClientDispatchable))

@@ -29,7 +29,7 @@ public enum ActionType: String, Codable, Sendable {
     case chatTurnComplete = "chat/turnComplete"
     case chatTurnCancelled = "chat/turnCancelled"
     case chatError = "chat/error"
-    case chatErrorRecoverySelected = "chat/errorRecoverySelected"
+    case chatTurnResume = "chat/turnResume"
     case chatActivityChanged = "chat/activityChanged"
     case chatWorkingDirectorySet = "chat/workingDirectorySet"
     case chatWorkingDirectoryRemoved = "chat/workingDirectoryRemoved"
@@ -895,7 +895,7 @@ public struct ChatErrorAction: Codable, Sendable {
     /// data.
     public var duration: Int
     /// Error part to append to the response stream before finalizing the turn.
-    /// Its optional recovery options describe the actions the host can perform.
+    /// Its optional `resumable` flag indicates whether the turn can be resumed.
     public var part: ErrorResponsePart
     /// Additional provider-specific metadata for this action.
     ///
@@ -929,25 +929,17 @@ public struct ChatErrorAction: Codable, Sendable {
     }
 }
 
-public struct ChatErrorRecoverySelectedAction: Codable, Sendable {
+public struct ChatTurnResumeAction: Codable, Sendable {
     public var type: ActionType
     /// Identifier of the errored turn.
     public var turnId: String
-    /// Identifier of the error response part.
-    public var partId: String
-    /// Identifier of the selected recovery option.
-    public var optionId: String
 
     public init(
         type: ActionType,
-        turnId: String,
-        partId: String,
-        optionId: String
+        turnId: String
     ) {
         self.type = type
         self.turnId = turnId
-        self.partId = partId
-        self.optionId = optionId
     }
 }
 
@@ -2064,7 +2056,7 @@ public enum StateAction: Codable, Sendable {
     case chatTurnComplete(ChatTurnCompleteAction)
     case chatTurnCancelled(ChatTurnCancelledAction)
     case chatError(ChatErrorAction)
-    case chatErrorRecoverySelected(ChatErrorRecoverySelectedAction)
+    case chatTurnResume(ChatTurnResumeAction)
     case chatActivityChanged(ChatActivityChangedAction)
     case sessionTitleChanged(SessionTitleChangedAction)
     case chatUsage(ChatUsageAction)
@@ -2185,8 +2177,8 @@ public enum StateAction: Codable, Sendable {
             self = .chatTurnCancelled(try ChatTurnCancelledAction(from: decoder))
         case "chat/error":
             self = .chatError(try ChatErrorAction(from: decoder))
-        case "chat/errorRecoverySelected":
-            self = .chatErrorRecoverySelected(try ChatErrorRecoverySelectedAction(from: decoder))
+        case "chat/turnResume":
+            self = .chatTurnResume(try ChatTurnResumeAction(from: decoder))
         case "chat/activityChanged":
             self = .chatActivityChanged(try ChatActivityChangedAction(from: decoder))
         case "session/titleChanged":
@@ -2341,7 +2333,7 @@ public enum StateAction: Codable, Sendable {
         case .chatTurnComplete(let v): try v.encode(to: encoder)
         case .chatTurnCancelled(let v): try v.encode(to: encoder)
         case .chatError(let v): try v.encode(to: encoder)
-        case .chatErrorRecoverySelected(let v): try v.encode(to: encoder)
+        case .chatTurnResume(let v): try v.encode(to: encoder)
         case .chatActivityChanged(let v): try v.encode(to: encoder)
         case .sessionTitleChanged(let v): try v.encode(to: encoder)
         case .chatUsage(let v): try v.encode(to: encoder)

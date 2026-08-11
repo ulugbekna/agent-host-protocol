@@ -27,7 +27,6 @@
       "duration": 8999,
       "part": {
         "kind": "error",
-        "id": "error-1",
         "error": {
           "errorType": "runtime",
           "message": "Something broke"
@@ -50,7 +49,6 @@
         "responseParts": [
           {
             "kind": "error",
-            "id": "error-1",
             "error": {
               "errorType": "runtime",
               "message": "Something broke"

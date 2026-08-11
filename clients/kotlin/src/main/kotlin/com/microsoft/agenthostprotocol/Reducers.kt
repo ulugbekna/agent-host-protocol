@@ -885,7 +885,7 @@ public fun chatReducer(state: ChatState, action: StateAction): ChatState = when 
     is StateActionChatError ->
         endTurn(state, action.value.turnId, action.value.duration, TurnState.ERROR, SessionStatus.ERROR, action.value.part)
 
-    is StateActionChatErrorRecoverySelected -> {
+    is StateActionChatTurnResume -> {
         val a = action.value
         if (state.activeTurn != null || state.turns.isEmpty()) {
             state
@@ -895,31 +895,17 @@ public fun chatReducer(state: ChatState, action: StateAction): ChatState = when 
             if (turn.id != a.turnId || turn.state != TurnState.ERROR) {
                 state
             } else {
-                val recoveryPartIndex = turn.responseParts.indexOfFirst { part ->
-                    part is ResponsePartError &&
-                        part.value.id == a.partId &&
-                        part.value.recovery != null &&
-                        part.value.recovery.selectedOptionId == null
-                }
-                val recoveryPart = turn.responseParts.getOrNull(recoveryPartIndex) as? ResponsePartError
-                val recovery = recoveryPart?.value?.recovery
-                val hasSelectedOption = recovery?.options?.any { it.id == a.optionId } == true
-                if (recoveryPart == null || recovery == null || !hasSelectedOption) {
+                val errorPart = turn.responseParts.lastOrNull() as? ResponsePartError
+                if (errorPart?.value?.resumable != true) {
                     state
                 } else {
-                    val responseParts = turn.responseParts.toMutableList()
-                    responseParts[recoveryPartIndex] = ResponsePartError(
-                        recoveryPart.value.copy(
-                            recovery = recovery.copy(selectedOptionId = a.optionId),
-                        ),
-                    )
                     val withTurn = state.copy(
                         turns = state.turns.dropLast(1),
                         activeTurn = ActiveTurn(
                             id = turn.id,
                             startedAt = turn.startedAt ?: state.modifiedAt,
                             message = turn.message,
-                            responseParts = responseParts,
+                            responseParts = turn.responseParts,
                             usage = turn.usage,
                         ),
                     )

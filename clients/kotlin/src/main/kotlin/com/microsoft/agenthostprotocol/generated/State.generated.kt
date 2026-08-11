@@ -2510,55 +2510,19 @@ data class InputRequestResponsePart(
 )
 
 @Serializable
-data class ErrorRecoveryOption(
-    /**
-     * Stable option identifier, returned in `chat/errorRecoverySelected`.
-     */
-    val id: String,
-    /**
-     * Human-readable label displayed to the user.
-     */
-    val label: String,
-    /**
-     * Optional secondary text.
-     */
-    val description: String? = null,
-    /**
-     * Whether this option is the recommended/default choice.
-     */
-    val recommended: Boolean? = null
-)
-
-@Serializable
-data class ErrorRecovery(
-    /**
-     * Ordered recovery options supplied by the host.
-     */
-    val options: List<ErrorRecoveryOption>,
-    /**
-     * Identifier of the option selected by the user, absent until recovery is requested.
-     */
-    val selectedOptionId: String? = null
-)
-
-@Serializable
 data class ErrorResponsePart(
     /**
      * Discriminant
      */
     val kind: ResponsePartKind,
     /**
-     * Stable part identifier.
-     */
-    val id: String,
-    /**
      * Error details.
      */
     val error: ErrorInfo,
     /**
-     * Recovery offered by the host, if any.
+     * Whether the host can resume the turn from this error.
      */
-    val recovery: ErrorRecovery? = null
+    val resumable: Boolean? = null
 )
 
 @Serializable

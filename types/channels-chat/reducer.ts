@@ -122,21 +122,9 @@ function findOpenInputRequestPart(
   return part.kind === ResponsePartKind.InputRequest ? { index, part } : undefined;
 }
 
-function findAvailableErrorRecoveryPart(
-  responseParts: readonly ResponsePart[],
-  partId: string,
-): { index: number; part: ErrorResponsePart } | undefined {
-  const index = responseParts.findIndex(part =>
-    part.kind === ResponsePartKind.Error
-    && part.id === partId
-    && part.recovery !== undefined
-    && part.recovery.selectedOptionId === undefined,
-  );
-  if (index < 0) {
-    return undefined;
-  }
-  const part = responseParts[index];
-  return part.kind === ResponsePartKind.Error ? { index, part } : undefined;
+function hasResumableError(turn: Turn): boolean {
+  const part = turn.responseParts[turn.responseParts.length - 1];
+  return part?.kind === ResponsePartKind.Error && part.resumable === true;
 }
 
 /** Bitmask covering the mutually-exclusive activity bits (bits 0–4). */
@@ -425,30 +413,15 @@ export function chatReducer(state: ChatState, action: ChatAction, log?: (msg: st
     case ActionType.ChatError:
       return endTurn(state, action.turnId, TurnState.Error, action.duration, SessionStatus.Error, action.part);
 
-    case ActionType.ChatErrorRecoverySelected: {
+    case ActionType.ChatTurnResume: {
       if (state.activeTurn) {
         return state;
       }
       const turnIndex = state.turns.length - 1;
       const turn = state.turns[turnIndex];
-      if (!turn || turn.id !== action.turnId || turn.state !== TurnState.Error) {
+      if (!turn || turn.id !== action.turnId || turn.state !== TurnState.Error || !hasResumableError(turn)) {
         return state;
       }
-      const recoveryPart = findAvailableErrorRecoveryPart(turn.responseParts, action.partId);
-      if (!recoveryPart?.part.recovery) {
-        return state;
-      }
-      if (!recoveryPart.part.recovery.options.some(option => option.id === action.optionId)) {
-        return state;
-      }
-      const responseParts = [...turn.responseParts];
-      responseParts[recoveryPart.index] = {
-        ...recoveryPart.part,
-        recovery: {
-          ...recoveryPart.part.recovery,
-          selectedOptionId: action.optionId,
-        },
-      };
       const turns = state.turns.slice();
       turns.splice(turnIndex, 1);
       const next: ChatState = {
@@ -458,7 +431,7 @@ export function chatReducer(state: ChatState, action: ChatAction, log?: (msg: st
           id: turn.id,
           startedAt: turn.startedAt ?? state.modifiedAt,
           message: turn.message,
-          responseParts,
+          responseParts: turn.responseParts,
           usage: turn.usage,
         },
       };
