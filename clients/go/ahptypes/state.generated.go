@@ -1863,7 +1863,7 @@ type InputRequestResponsePart struct {
 // remains {@link TurnState.Error} while the turn is stopped at this error so
 // clients can detect the terminal state without inspecting response parts.
 //
-// When {@link resumable} is present, a client may dispatch `chat/turnResume`
+// When {@link resumable} is `true`, a client may dispatch `chat/turnResume`
 // while this is the latest turn and its state is {@link TurnState.Error}.
 // Clients decide whether and how to present that affordance.
 type ErrorResponsePart struct {
@@ -1871,7 +1871,7 @@ type ErrorResponsePart struct {
 	Kind ResponsePartKind `json:"kind"`
 	// Error details.
 	Error ErrorInfo `json:"error"`
-	// Whether the host can resume the turn from this error.
+	// Whether the host can resume the turn from this error. Only `true` enables resume.
 	Resumable *bool `json:"resumable,omitempty"`
 }
 
@@ -3606,6 +3606,94 @@ func (t *ToolInput) UnmarshalJSON(data []byte) error {
 }
 
 // ─── Discriminated Unions ─────────────────────────────────────────────
+
+// AppendableResponsePart is a non-error part that may be appended while a turn is active.
+type AppendableResponsePart struct {
+	Value isAppendableResponsePart
+}
+
+// isAppendableResponsePart is the marker interface implemented by every
+// concrete variant of AppendableResponsePart.
+type isAppendableResponsePart interface{ isAppendableResponsePart() }
+
+func (*MarkdownResponsePart) isAppendableResponsePart()           {}
+func (*ResourceResponsePart) isAppendableResponsePart()           {}
+func (*ToolCallResponsePart) isAppendableResponsePart()           {}
+func (*ReasoningResponsePart) isAppendableResponsePart()          {}
+func (*SystemNotificationResponsePart) isAppendableResponsePart() {}
+func (*InputRequestResponsePart) isAppendableResponsePart()       {}
+
+// AppendableResponsePartUnknown carries an unrecognized AppendableResponsePart variant — typically a discriminator value introduced by a newer protocol version. The original JSON object is preserved verbatim so that re-encoding round-trips faithfully.
+type AppendableResponsePartUnknown struct {
+	Raw json.RawMessage
+}
+
+func (*AppendableResponsePartUnknown) isAppendableResponsePart() {}
+
+// UnmarshalJSON decodes the variant indicated by the "kind" discriminator.
+func (u *AppendableResponsePart) UnmarshalJSON(data []byte) error {
+	disc, _, err := readDiscriminator(data, "kind")
+	if err != nil {
+		return err
+	}
+	switch disc {
+	case "markdown":
+		var value MarkdownResponsePart
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		u.Value = &value
+	case "contentRef":
+		var value ResourceResponsePart
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		u.Value = &value
+	case "toolCall":
+		var value ToolCallResponsePart
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		u.Value = &value
+	case "reasoning":
+		var value ReasoningResponsePart
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		u.Value = &value
+	case "systemNotification":
+		var value SystemNotificationResponsePart
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		u.Value = &value
+	case "inputRequest":
+		var value InputRequestResponsePart
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		u.Value = &value
+	default:
+		raw := make(json.RawMessage, len(data))
+		copy(raw, data)
+		u.Value = &AppendableResponsePartUnknown{Raw: raw}
+	}
+	return nil
+}
+
+// MarshalJSON encodes the active variant back to JSON.
+func (u AppendableResponsePart) MarshalJSON() ([]byte, error) {
+	if unk, ok := u.Value.(*AppendableResponsePartUnknown); ok {
+		if len(unk.Raw) == 0 {
+			return []byte("null"), nil
+		}
+		return unk.Raw, nil
+	}
+	if u.Value == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(u.Value)
+}
 
 // ResponsePart is a single part of a response stream (text, tool call, reasoning, content reference).
 type ResponsePart struct {

@@ -2520,7 +2520,7 @@ data class ErrorResponsePart(
      */
     val error: ErrorInfo,
     /**
-     * Whether the host can resume the turn from this error.
+     * Whether the host can resume the turn from this error. Only `true` enables resume.
      */
     val resumable: Boolean? = null
 )
@@ -4779,6 +4779,71 @@ internal object ChatOriginSerializer : KSerializer<ChatOrigin> {
             is ChatOrigin.SideChat -> output.json.encodeToJsonElement(ChatOriginSideChat.serializer(), value.value)
             is ChatOrigin.Tool -> output.json.encodeToJsonElement(ChatOriginTool.serializer(), value.value)
             is ChatOrigin.Unknown -> value.raw
+        }
+        output.encodeJsonElement(element)
+    }
+}
+
+@Serializable(with = AppendableResponsePartSerializer::class)
+sealed interface AppendableResponsePart
+
+@JvmInline
+value class AppendableResponsePartMarkdown(val value: MarkdownResponsePart) : AppendableResponsePart
+@JvmInline
+value class AppendableResponsePartContentRef(val value: ResourceResponsePart) : AppendableResponsePart
+@JvmInline
+value class AppendableResponsePartToolCall(val value: ToolCallResponsePart) : AppendableResponsePart
+@JvmInline
+value class AppendableResponsePartReasoning(val value: ReasoningResponsePart) : AppendableResponsePart
+@JvmInline
+value class AppendableResponsePartSystemNotification(val value: SystemNotificationResponsePart) : AppendableResponsePart
+@JvmInline
+value class AppendableResponsePartInputRequest(val value: InputRequestResponsePart) : AppendableResponsePart
+/**
+ * Forward-compat catch-all for unknown AppendableResponsePart discriminators.
+ *
+ * Older clients may receive newer wire variants they don't recognise; capturing
+ * the raw `JsonObject` lets such payloads round-trip through the client unchanged.
+ * Reducers handle this variant conservatively on a per-union basis (typically
+ * as a no-op, but see `Reducers.kt` for the exact treatment).
+ */
+@JvmInline
+value class AppendableResponsePartUnknown(val raw: JsonObject) : AppendableResponsePart
+
+internal object AppendableResponsePartSerializer : KSerializer<AppendableResponsePart> {
+    override val descriptor: SerialDescriptor =
+        buildClassSerialDescriptor("AppendableResponsePart")
+
+    override fun deserialize(decoder: Decoder): AppendableResponsePart {
+        val input = decoder as? JsonDecoder
+            ?: error("AppendableResponsePart can only be deserialized from JSON")
+        val element = input.decodeJsonElement()
+        val obj = element as? JsonObject
+            ?: error("Expected JsonObject for AppendableResponsePart")
+        val discriminant = (obj["kind"] as? JsonPrimitive)?.content
+            ?: return AppendableResponsePartUnknown(obj)
+        return when (discriminant) {
+            "markdown" -> AppendableResponsePartMarkdown(input.json.decodeFromJsonElement(MarkdownResponsePart.serializer(), element))
+            "contentRef" -> AppendableResponsePartContentRef(input.json.decodeFromJsonElement(ResourceResponsePart.serializer(), element))
+            "toolCall" -> AppendableResponsePartToolCall(input.json.decodeFromJsonElement(ToolCallResponsePart.serializer(), element))
+            "reasoning" -> AppendableResponsePartReasoning(input.json.decodeFromJsonElement(ReasoningResponsePart.serializer(), element))
+            "systemNotification" -> AppendableResponsePartSystemNotification(input.json.decodeFromJsonElement(SystemNotificationResponsePart.serializer(), element))
+            "inputRequest" -> AppendableResponsePartInputRequest(input.json.decodeFromJsonElement(InputRequestResponsePart.serializer(), element))
+            else -> AppendableResponsePartUnknown(obj)
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: AppendableResponsePart) {
+        val output = encoder as? JsonEncoder
+            ?: error("AppendableResponsePart can only be serialized to JSON")
+        val element: JsonElement = when (value) {
+            is AppendableResponsePartMarkdown -> output.json.encodeToJsonElement(MarkdownResponsePart.serializer(), value.value)
+            is AppendableResponsePartContentRef -> output.json.encodeToJsonElement(ResourceResponsePart.serializer(), value.value)
+            is AppendableResponsePartToolCall -> output.json.encodeToJsonElement(ToolCallResponsePart.serializer(), value.value)
+            is AppendableResponsePartReasoning -> output.json.encodeToJsonElement(ReasoningResponsePart.serializer(), value.value)
+            is AppendableResponsePartSystemNotification -> output.json.encodeToJsonElement(SystemNotificationResponsePart.serializer(), value.value)
+            is AppendableResponsePartInputRequest -> output.json.encodeToJsonElement(InputRequestResponsePart.serializer(), value.value)
+            is AppendableResponsePartUnknown -> value.raw
         }
         output.encodeJsonElement(element)
     }

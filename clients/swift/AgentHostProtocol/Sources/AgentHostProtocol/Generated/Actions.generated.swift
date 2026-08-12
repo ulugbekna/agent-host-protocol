@@ -338,8 +338,8 @@ public struct ChatResponsePartAction: Codable, Sendable {
     public var type: ActionType
     /// Turn identifier
     public var turnId: String
-    /// Response part to append; error parts are ignored.
-    public var part: ResponsePart
+    /// Non-error response part to append.
+    public var part: AppendableResponsePart
     /// Additional provider-specific metadata for this action.
     ///
     /// Clients MAY look for well-known keys here to provide enhanced UI, and
@@ -359,7 +359,7 @@ public struct ChatResponsePartAction: Codable, Sendable {
     public init(
         type: ActionType,
         turnId: String,
-        part: ResponsePart,
+        part: AppendableResponsePart,
         meta: [String: AnyCodable]? = nil
     ) {
         self.type = type

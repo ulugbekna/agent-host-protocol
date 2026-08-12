@@ -452,6 +452,7 @@ func updateResponsePart(state *ahptypes.ChatState, turnID, partID string, update
 	if state.ActiveTurn == nil || state.ActiveTurn.Id != turnID {
 		return ReduceOutcomeNoOp
 	}
+
 	for i := range state.ActiveTurn.ResponseParts {
 		part := &state.ActiveTurn.ResponseParts[i]
 		var id string
@@ -469,6 +470,33 @@ func updateResponsePart(state *ahptypes.ChatState, turnID, partID string, update
 		}
 	}
 	return ReduceOutcomeNoOp
+}
+
+func responsePartFromAppendable(part ahptypes.AppendableResponsePart) (ahptypes.ResponsePart, bool) {
+	switch value := part.Value.(type) {
+	case *ahptypes.MarkdownResponsePart:
+		return ahptypes.ResponsePart{Value: value}, true
+	case *ahptypes.ResourceResponsePart:
+		return ahptypes.ResponsePart{Value: value}, true
+	case *ahptypes.ToolCallResponsePart:
+		return ahptypes.ResponsePart{Value: value}, true
+	case *ahptypes.ReasoningResponsePart:
+		return ahptypes.ResponsePart{Value: value}, true
+	case *ahptypes.SystemNotificationResponsePart:
+		return ahptypes.ResponsePart{Value: value}, true
+	case *ahptypes.InputRequestResponsePart:
+		return ahptypes.ResponsePart{Value: value}, true
+	case *ahptypes.AppendableResponsePartUnknown:
+		var discriminator struct {
+			Kind string `json:"kind"`
+		}
+		if json.Unmarshal(value.Raw, &discriminator) != nil || discriminator.Kind == "error" {
+			return ahptypes.ResponsePart{}, false
+		}
+		return ahptypes.ResponsePart{Value: &ahptypes.ResponsePartUnknown{Raw: value.Raw}}, true
+	default:
+		return ahptypes.ResponsePart{}, false
+	}
 }
 
 // ─── Root Reducer ──────────────────────────────────────────────────────
@@ -525,10 +553,11 @@ func ApplyActionToChat(state *ahptypes.ChatState, action ahptypes.StateAction) R
 		if state.ActiveTurn == nil || state.ActiveTurn.Id != a.TurnId {
 			return ReduceOutcomeNoOp
 		}
-		if _, ok := a.Part.Value.(*ahptypes.ErrorResponsePart); ok {
+		part, ok := responsePartFromAppendable(a.Part)
+		if !ok {
 			return ReduceOutcomeNoOp
 		}
-		state.ActiveTurn.ResponseParts = append(state.ActiveTurn.ResponseParts, a.Part)
+		state.ActiveTurn.ResponseParts = append(state.ActiveTurn.ResponseParts, part)
 		return ReduceOutcomeApplied
 	case *ahptypes.ChatTurnCompleteAction:
 		return endTurn(state, a.TurnId, a.Duration, ahptypes.TurnStateComplete, nil, nil)

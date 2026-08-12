@@ -174,7 +174,7 @@ Once a chat exists and its session is `lifecycle: 'ready'`, the chat accepts tur
 - The client dispatches `chat/toolCallConfirmed` / `chat/toolCallResultConfirmed` to approve or deny tool calls, or `chat/turnCancelled` to abort.
 - The server dispatches `chat/turnComplete` or `chat/error` when the turn ends.
 - The server MAY dispatch `chat/inputRequested` while a turn is active. Clients sync answer drafts with `chat/inputAnswerChanged` and finish the request with `chat/inputCompleted`.
-- A `chat/error` appends an error response part before setting the turn state to `error`. When that part is resumable, a client may dispatch `chat/turnResume` to continue the same turn without another user message.
+- A `chat/error` appends an error response part before setting the turn state to `error`. When that part has `resumable: true`, a client may dispatch `chat/turnResume` to continue the same turn without another user message.
 
 All actions dispatched on this channel travel on `ActionEnvelope`s whose `channel` is the chat URI. Action payloads do NOT carry their own chat URI — the channel comes from the envelope.
 
@@ -183,7 +183,7 @@ All actions dispatched on this channel travel on `ActionEnvelope`s whose `channe
 An error ends the active turn with `TurnState.Error`, providing a simple
 top-level signal for clients that do not implement resume. Its
 `ErrorResponsePart` is the detailed source of truth: it contains `ErrorInfo`
-and may declare the turn resumable. Clients decide whether and how to present
+and may declare the turn resumable with `resumable: true`. Clients decide whether and how to present
 that affordance.
 
 Errors MUST enter the response stream through `chat/error`; reducers ignore an

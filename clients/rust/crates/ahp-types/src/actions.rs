@@ -13,8 +13,8 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 
 #[allow(unused_imports)]
 use crate::state::{
-    AgentInfo, AgentSelection, Annotation, AnnotationEntry, Changeset, ChangesetFile,
-    ChangesetOperation, ChangesetOperationStatus, ChangesetStatus, ChatInputAnswer,
+    AgentInfo, AgentSelection, Annotation, AnnotationEntry, AppendableResponsePart, Changeset,
+    ChangesetFile, ChangesetOperation, ChangesetOperationStatus, ChangesetStatus, ChatInputAnswer,
     ChatInputRequest, ChatInputResponseKind, ChatInteractivity, ChatOrigin, ChatSummary,
     ConfirmationOption, ContentRef, Customization, ErrorInfo, ErrorResponsePart,
     McpAuthRequirement, McpServerState, Message, ModelSelection, PendingMessageKind, ResponsePart,
@@ -388,8 +388,8 @@ pub struct ChatDeltaAction {
 pub struct ChatResponsePartAction {
     /// Turn identifier
     pub turn_id: String,
-    /// Response part to append; error parts are ignored.
-    pub part: ResponsePart,
+    /// Non-error response part to append.
+    pub part: AppendableResponsePart,
     /// Additional provider-specific metadata for this action.
     ///
     /// Clients MAY look for well-known keys here to provide enhanced UI, and
@@ -757,7 +757,7 @@ pub struct ChatTurnCancelledAction {
 }
 
 /// Error during turn processing.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatErrorAction {
     /// Turn identifier
@@ -779,6 +779,41 @@ pub struct ChatErrorAction {
     /// convention.
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<JsonObject>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatErrorActionPart<'a> {
+    kind: &'static str,
+    error: &'a ErrorInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resumable: Option<bool>,
+}
+
+impl Serialize for ChatErrorAction {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer
+            .serialize_struct("ChatErrorAction", if self.meta.is_some() { 4 } else { 3 })?;
+        state.serialize_field("turnId", &self.turn_id)?;
+        state.serialize_field("duration", &self.duration)?;
+        state.serialize_field(
+            "part",
+            &ChatErrorActionPart {
+                kind: "error",
+                error: &self.part.error,
+                resumable: self.part.resumable,
+            },
+        )?;
+        if let Some(meta) = &self.meta {
+            state.serialize_field("_meta", meta)?;
+        }
+        state.end()
+    }
 }
 
 /// Resumes the latest errored turn without adding another message.

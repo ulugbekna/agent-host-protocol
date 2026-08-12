@@ -9,7 +9,7 @@ import type { StringOrMarkdown, FileEdit, UsageInfo, URI } from '../common/state
 import type { McpAuthRequirement } from '../channels-session/state.js';
 import type {
   Message,
-  ResponsePart,
+  AppendableResponsePart,
   ToolCallResult,
   ToolResultContent,
   ChatInputAnswer,
@@ -129,8 +129,8 @@ export interface ChatResponsePartAction {
   type: ActionType.ChatResponsePart;
   /** Turn identifier */
   turnId: string;
-  /** Response part to append; error parts are ignored. */
-  part: ResponsePart;
+  /** Non-error response part to append. */
+  part: AppendableResponsePart;
   /**
    * Additional provider-specific metadata for this action.
    *

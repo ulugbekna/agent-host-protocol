@@ -2290,7 +2290,7 @@ pub struct InputRequestResponsePart {
 /// remains {@link TurnState.Error} while the turn is stopped at this error so
 /// clients can detect the terminal state without inspecting response parts.
 ///
-/// When {@link resumable} is present, a client may dispatch `chat/turnResume`
+/// When {@link resumable} is `true`, a client may dispatch `chat/turnResume`
 /// while this is the latest turn and its state is {@link TurnState.Error}.
 /// Clients decide whether and how to present that affordance.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2298,7 +2298,7 @@ pub struct InputRequestResponsePart {
 pub struct ErrorResponsePart {
     /// Error details.
     pub error: ErrorInfo,
-    /// Whether the host can resume the turn from this error.
+    /// Whether the host can resume the turn from this error. Only `true` enables resume.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resumable: Option<bool>,
 }
@@ -4323,6 +4323,28 @@ pub enum ChatOrigin {
         #[serde(rename = "toolCallId")]
         tool_call_id: String,
     },
+    /// Unknown or future variant — preserved as raw JSON for round-trip fidelity.
+    /// Reducers treat this as a no-op.
+    #[serde(untagged)]
+    Unknown(serde_json::Value),
+}
+
+/// A non-error part that may be appended while a turn is active.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum AppendableResponsePart {
+    #[serde(rename = "markdown")]
+    Markdown(MarkdownResponsePart),
+    #[serde(rename = "contentRef")]
+    ContentRef(ResourceResponsePart),
+    #[serde(rename = "toolCall")]
+    ToolCall(Box<ToolCallResponsePart>),
+    #[serde(rename = "reasoning")]
+    Reasoning(ReasoningResponsePart),
+    #[serde(rename = "systemNotification")]
+    SystemNotification(SystemNotificationResponsePart),
+    #[serde(rename = "inputRequest")]
+    InputRequest(InputRequestResponsePart),
     /// Unknown or future variant — preserved as raw JSON for round-trip fidelity.
     /// Reducers treat this as a no-op.
     #[serde(untagged)]

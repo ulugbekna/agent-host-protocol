@@ -127,6 +127,10 @@ function hasResumableError(turn: Turn): boolean {
   return part?.kind === ResponsePartKind.Error && part.resumable === true;
 }
 
+function isErrorResponsePart(part: ResponsePart): part is ErrorResponsePart {
+  return part.kind === ResponsePartKind.Error;
+}
+
 /** Bitmask covering the mutually-exclusive activity bits (bits 0–4). */
 const STATUS_ACTIVITY_MASK = (1 << 5) - 1;
 
@@ -393,7 +397,7 @@ export function chatReducer(state: ChatState, action: ChatAction, log?: (msg: st
       if (!state.activeTurn || state.activeTurn.id !== action.turnId) {
         return state;
       }
-      if (action.part.kind === ResponsePartKind.Error) {
+      if (isErrorResponsePart(action.part)) {
         return state;
       }
       return {

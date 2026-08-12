@@ -11,6 +11,8 @@ package com.microsoft.agenthostprotocol
 import com.microsoft.agenthostprotocol.generated.*
 import java.time.Instant
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 // ─── Reducer Interface ──────────────────────────────────────────────────────
 
@@ -27,6 +29,19 @@ import kotlinx.serialization.json.JsonElement
 public fun interface Reducer<S, A> {
     public fun reduce(state: S, action: A): S
 }
+
+private fun AppendableResponsePart.toResponsePart(): ResponsePart = when (this) {
+    is AppendableResponsePartMarkdown -> ResponsePartMarkdown(value)
+    is AppendableResponsePartContentRef -> ResponsePartContentRef(value)
+    is AppendableResponsePartToolCall -> ResponsePartToolCall(value)
+    is AppendableResponsePartReasoning -> ResponsePartReasoning(value)
+    is AppendableResponsePartSystemNotification -> ResponsePartSystemNotification(value)
+    is AppendableResponsePartInputRequest -> ResponsePartInputRequest(value)
+    is AppendableResponsePartUnknown -> ResponsePartUnknown(raw)
+}
+
+private fun AppendableResponsePart.isErrorResponsePart(): Boolean =
+    this is AppendableResponsePartUnknown && (raw["kind"] as? JsonPrimitive)?.contentOrNull == "error"
 
 /** Pure root reducer as a [Reducer] instance. Delegates to [rootReducer]. */
 public object RootReducer : Reducer<RootState, StateAction> {
@@ -867,11 +882,11 @@ public fun chatReducer(state: ChatState, action: StateAction): ChatState = when 
     is StateActionChatResponsePart -> {
         val a = action.value
         val activeTurn = state.activeTurn
-        if (activeTurn == null || activeTurn.id != a.turnId || a.part is ResponsePartError) {
+        if (activeTurn == null || activeTurn.id != a.turnId || a.part.isErrorResponsePart()) {
             state
         } else {
             state.copy(
-                activeTurn = activeTurn.copy(responseParts = activeTurn.responseParts + a.part),
+                activeTurn = activeTurn.copy(responseParts = activeTurn.responseParts + a.part.toResponsePart()),
             )
         }
     }

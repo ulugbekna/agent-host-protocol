@@ -58,11 +58,11 @@ use ahp_types::actions::{
     ChatTurnStartedAction, StateAction,
 };
 use ahp_types::state::{
-    ActiveTurn, AnnotationsState, ChangesetOperationStatus, ChangesetState, ChangesetStatus,
-    ChatInputRequest, ChatState, ChildCustomization, ConfirmationOption, Customization,
-    ErrorResponsePart, InputRequestResponsePart, McpServerStartingState, McpServerState,
-    McpServerStoppedState, PendingMessage, PendingMessageKind, ResourceWatchState, ResponsePart,
-    RootState, SessionInputRequest, SessionLifecycle, SessionState, SessionStatus,
+    ActiveTurn, AnnotationsState, AppendableResponsePart, ChangesetOperationStatus, ChangesetState,
+    ChangesetStatus, ChatInputRequest, ChatState, ChildCustomization, ConfirmationOption,
+    Customization, ErrorResponsePart, InputRequestResponsePart, McpServerStartingState,
+    McpServerState, McpServerStoppedState, PendingMessage, PendingMessageKind, ResourceWatchState,
+    ResponsePart, RootState, SessionInputRequest, SessionLifecycle, SessionState, SessionStatus,
     TerminalCommandPart, TerminalContentPart, TerminalState, TerminalUnclassifiedPart,
     ToolCallAuthRequiredState, ToolCallCancellationReason, ToolCallCancelledState,
     ToolCallCompletedState, ToolCallConfirmationReason, ToolCallContributor,
@@ -613,6 +613,28 @@ where
     ReduceOutcome::NoOp
 }
 
+fn appendable_response_part(part: &AppendableResponsePart) -> ResponsePart {
+    match part {
+        AppendableResponsePart::Markdown(value) => ResponsePart::Markdown(value.clone()),
+        AppendableResponsePart::ContentRef(value) => ResponsePart::ContentRef(value.clone()),
+        AppendableResponsePart::ToolCall(value) => ResponsePart::ToolCall(value.clone()),
+        AppendableResponsePart::Reasoning(value) => ResponsePart::Reasoning(value.clone()),
+        AppendableResponsePart::SystemNotification(value) => {
+            ResponsePart::SystemNotification(value.clone())
+        }
+        AppendableResponsePart::InputRequest(value) => ResponsePart::InputRequest(value.clone()),
+        AppendableResponsePart::Unknown(value) => ResponsePart::Unknown(value.clone()),
+    }
+}
+
+fn is_error_response_part(part: &AppendableResponsePart) -> bool {
+    matches!(
+        part,
+        AppendableResponsePart::Unknown(serde_json::Value::Object(value))
+            if value.get("kind").and_then(serde_json::Value::as_str) == Some("error")
+    )
+}
+
 // ─── Root Reducer ─────────────────────────────────────────────────────
 
 /// Apply a [`StateAction`] to a [`RootState`] in place.
@@ -971,10 +993,12 @@ pub fn apply_action_to_chat(state: &mut ChatState, action: &StateAction) -> Redu
             if active.id != a.turn_id {
                 return ReduceOutcome::NoOp;
             }
-            if matches!(a.part, ResponsePart::Error(_)) {
+            if is_error_response_part(&a.part) {
                 return ReduceOutcome::NoOp;
             }
-            active.response_parts.push(a.part.clone());
+            active
+                .response_parts
+                .push(appendable_response_part(&a.part));
             ReduceOutcome::Applied
         }
         StateAction::ChatTurnComplete(a) => end_turn(

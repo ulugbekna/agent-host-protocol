@@ -916,16 +916,28 @@ export interface ReasoningResponsePart {
 }
 
 /**
+ * A response part that may be appended while a turn is active with
+ * `chat/responsePart`.
+ *
+ * Errors are excluded because they must be appended atomically with the
+ * terminal `chat/error` transition.
+ *
  * @category Response Parts
  */
-export type ResponsePart =
+export type AppendableResponsePart =
   | MarkdownResponsePart
   | ResourceResponsePart
   | ToolCallResponsePart
   | ReasoningResponsePart
   | SystemNotificationResponsePart
-  | InputRequestResponsePart
-  | ErrorResponsePart;
+  | InputRequestResponsePart;
+
+/**
+ * Any durable part of a turn's response stream.
+ *
+ * @category Response Parts
+ */
+export type ResponsePart = AppendableResponsePart | ErrorResponsePart;
 
 /**
  * A live or resolved input request (elicitation) in the turn response stream.
@@ -963,7 +975,7 @@ export interface InputRequestResponsePart {
  * remains {@link TurnState.Error} while the turn is stopped at this error so
  * clients can detect the terminal state without inspecting response parts.
  *
- * When {@link resumable} is present, a client may dispatch `chat/turnResume`
+ * When {@link resumable} is `true`, a client may dispatch `chat/turnResume`
  * while this is the latest turn and its state is {@link TurnState.Error}.
  * Clients decide whether and how to present that affordance.
  *
@@ -974,8 +986,8 @@ export interface ErrorResponsePart {
   kind: ResponsePartKind.Error;
   /** Error details. */
   error: ErrorInfo;
-  /** Whether the host can resume the turn from this error. */
-  resumable?: true;
+  /** Whether the host can resume the turn from this error. Only `true` enables resume. */
+  resumable?: boolean;
 }
 
 /**

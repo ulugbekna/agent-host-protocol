@@ -41,6 +41,10 @@
       "type": "chat/turnComplete",
       "turnId": "turn-1",
       "duration": 2000
+    },
+    {
+      "type": "chat/turnResume",
+      "turnId": "turn-1"
     }
   ],
   "expected": {

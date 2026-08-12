@@ -670,6 +670,20 @@ const STATE_STRUCTS = [
   'ResourceWatchState', 'ResourceChange',
 ];
 
+const APPENDABLE_RESPONSE_PART_UNION: UnionConfig = {
+  name: 'AppendableResponsePart',
+  discriminantField: 'kind',
+  allowUnknown: true,
+  variants: [
+    { caseName: 'markdown', structName: 'MarkdownResponsePart', discriminantValue: 'markdown' },
+    { caseName: 'contentRef', structName: 'ResourceResponsePart', discriminantValue: 'contentRef' },
+    { caseName: 'toolCall', structName: 'ToolCallResponsePart', discriminantValue: 'toolCall' },
+    { caseName: 'reasoning', structName: 'ReasoningResponsePart', discriminantValue: 'reasoning' },
+    { caseName: 'systemNotification', structName: 'SystemNotificationResponsePart', discriminantValue: 'systemNotification' },
+    { caseName: 'inputRequest', structName: 'InputRequestResponsePart', discriminantValue: 'inputRequest' },
+  ],
+};
+
 const RESPONSE_PART_UNION: UnionConfig = {
   name: 'ResponsePart',
   discriminantField: 'kind',
@@ -679,12 +693,7 @@ const RESPONSE_PART_UNION: UnionConfig = {
   // other parts (by id) still work correctly. Mirrors .NET allowUnknown.
   allowUnknown: true,
   variants: [
-    { caseName: 'markdown', structName: 'MarkdownResponsePart', discriminantValue: 'markdown' },
-    { caseName: 'contentRef', structName: 'ResourceResponsePart', discriminantValue: 'contentRef' },
-    { caseName: 'toolCall', structName: 'ToolCallResponsePart', discriminantValue: 'toolCall' },
-    { caseName: 'reasoning', structName: 'ReasoningResponsePart', discriminantValue: 'reasoning' },
-    { caseName: 'systemNotification', structName: 'SystemNotificationResponsePart', discriminantValue: 'systemNotification' },
-    { caseName: 'inputRequest', structName: 'InputRequestResponsePart', discriminantValue: 'inputRequest' },
+    ...APPENDABLE_RESPONSE_PART_UNION.variants,
     { caseName: 'error', structName: 'ErrorResponsePart', discriminantValue: 'error' },
   ],
 };
@@ -1159,6 +1168,8 @@ function generateStateFile(project: Project): string {
 
   lines.push('// MARK: - Discriminated Unions\n');
   lines.push(generateChatOriginSwift());
+  lines.push('');
+  lines.push(generateDiscriminatedUnion(APPENDABLE_RESPONSE_PART_UNION));
   lines.push('');
   lines.push(generateDiscriminatedUnion(RESPONSE_PART_UNION));
   lines.push('');
@@ -2101,6 +2112,7 @@ function checkExhaustiveness(project: Project): void {
     'StateAction',                  // StateAction enum in generateActionsFile()
     'ActionEnvelope',               // generateStructFromInterface() call in generateActionsFile()
     'ActionOrigin',                 // generateStructFromInterface() call in generateActionsFile()
+    'AppendableResponsePart',       // APPENDABLE_RESPONSE_PART_UNION discriminated union
     'ResponsePart',                 // RESPONSE_PART_UNION discriminated union
     'ToolResultContent',            // TOOL_RESULT_CONTENT_UNION discriminated union
     'SessionToolCallApprovedAction', // merged into SessionToolCallConfirmedAction

@@ -832,10 +832,10 @@ const STATE_STRUCTS: { name: string; omitDiscriminants?: boolean; goName?: strin
   { name: 'ResourceChange' },
 ];
 
-const RESPONSE_PART_UNION: UnionConfig = {
-  name: 'ResponsePart',
+const APPENDABLE_RESPONSE_PART_UNION: UnionConfig = {
+  name: 'AppendableResponsePart',
   discriminantField: 'kind',
-  doc: 'ResponsePart is a single part of a response stream (text, tool call, reasoning, content reference).',
+  doc: 'AppendableResponsePart is a non-error part that may be appended while a turn is active.',
   variants: [
     { variantName: 'Markdown', innerType: 'MarkdownResponsePart', wireValue: 'markdown' },
     { variantName: 'ContentRef', innerType: 'ResourceResponsePart', wireValue: 'contentRef' },
@@ -843,6 +843,16 @@ const RESPONSE_PART_UNION: UnionConfig = {
     { variantName: 'Reasoning', innerType: 'ReasoningResponsePart', wireValue: 'reasoning' },
     { variantName: 'SystemNotification', innerType: 'SystemNotificationResponsePart', wireValue: 'systemNotification' },
     { variantName: 'InputRequest', innerType: 'InputRequestResponsePart', wireValue: 'inputRequest' },
+  ],
+  unknown: true,
+};
+
+const RESPONSE_PART_UNION: UnionConfig = {
+  name: 'ResponsePart',
+  discriminantField: 'kind',
+  doc: 'ResponsePart is a single part of a response stream (text, tool call, reasoning, content reference).',
+  variants: [
+    ...APPENDABLE_RESPONSE_PART_UNION.variants,
     { variantName: 'Error', innerType: 'ErrorResponsePart', wireValue: 'error' },
   ],
   unknown: true,
@@ -1321,6 +1331,8 @@ function generateStateFile(project: Project): string {
   lines.push('');
 
   lines.push('// ─── Discriminated Unions ─────────────────────────────────────────────\n');
+  lines.push(generateDiscriminatedUnion(APPENDABLE_RESPONSE_PART_UNION));
+  lines.push('');
   lines.push(generateDiscriminatedUnion(RESPONSE_PART_UNION));
   lines.push('');
   lines.push(generateDiscriminatedUnion(TOOL_CALL_STATE_UNION));
@@ -2059,6 +2071,7 @@ function checkExhaustiveness(project: Project): void {
     'StateAction',
     'ActionEnvelope',
     'ActionOrigin',
+    'AppendableResponsePart',
     'ResponsePart',
     'ToolResultContent',
     'SessionToolCallApprovedAction',

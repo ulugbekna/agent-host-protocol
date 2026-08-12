@@ -352,7 +352,7 @@ InputRequestResponsePart {
 ErrorResponsePart {
   kind: 'error'
   error: ErrorInfo
-  resumable?: true
+  resumable?: boolean
 }
 ```
 

@@ -3382,7 +3382,7 @@
     },
     "ErrorResponsePart": {
       "type": "object",
-      "description": "An error encountered while processing a turn.\n\nThis is the detailed source of truth for the error. {@link Turn.state}\nremains {@link TurnState.Error} while the turn is stopped at this error so\nclients can detect the terminal state without inspecting response parts.\n\nWhen {@link resumable} is present, a client may dispatch `chat/turnResume`\nwhile this is the latest turn and its state is {@link TurnState.Error}.\nClients decide whether and how to present that affordance.",
+      "description": "An error encountered while processing a turn.\n\nThis is the detailed source of truth for the error. {@link Turn.state}\nremains {@link TurnState.Error} while the turn is stopped at this error so\nclients can detect the terminal state without inspecting response parts.\n\nWhen {@link resumable} is `true`, a client may dispatch `chat/turnResume`\nwhile this is the latest turn and its state is {@link TurnState.Error}.\nClients decide whether and how to present that affordance.",
       "properties": {
         "kind": {
           "const": "error",
@@ -3393,7 +3393,8 @@
           "description": "Error details."
         },
         "resumable": {
-          "description": "Whether the host can resume the turn from this error."
+          "type": "boolean",
+          "description": "Whether the host can resume the turn from this error. Only `true` enables resume."
         }
       },
       "required": [
@@ -5203,7 +5204,7 @@
       ],
       "description": "An attachment associated with a {@link Message}."
     },
-    "ResponsePart": {
+    "AppendableResponsePart": {
       "oneOf": [
         {
           "$ref": "#/$defs/MarkdownResponsePart"
@@ -5222,11 +5223,20 @@
         },
         {
           "$ref": "#/$defs/InputRequestResponsePart"
+        }
+      ],
+      "description": "A response part that may be appended while a turn is active with\n`chat/responsePart`.\n\nErrors are excluded because they must be appended atomically with the\nterminal `chat/error` transition."
+    },
+    "ResponsePart": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AppendableResponsePart"
         },
         {
           "$ref": "#/$defs/ErrorResponsePart"
         }
-      ]
+      ],
+      "description": "Any durable part of a turn's response stream."
     },
     "ToolCallRiskAssessment": {
       "oneOf": [

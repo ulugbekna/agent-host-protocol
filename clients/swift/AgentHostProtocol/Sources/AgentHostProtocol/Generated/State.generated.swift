@@ -2532,7 +2532,7 @@ public struct ErrorResponsePart: Codable, Sendable {
     public var kind: ResponsePartKind
     /// Error details.
     public var error: ErrorInfo
-    /// Whether the host can resume the turn from this error.
+    /// Whether the host can resume the turn from this error. Only `true` enables resume.
     public var resumable: Bool?
 
     public init(
@@ -5343,6 +5343,55 @@ public enum ChatOrigin: Codable, Sendable {
         case .fork(let value): try value.encode(to: encoder)
         case .sideChat(let value): try value.encode(to: encoder)
         case .tool(let value): try value.encode(to: encoder)
+        }
+    }
+}
+
+public enum AppendableResponsePart: Codable, Sendable {
+    case markdown(MarkdownResponsePart)
+    case contentRef(ResourceResponsePart)
+    case toolCall(ToolCallResponsePart)
+    case reasoning(ReasoningResponsePart)
+    case systemNotification(SystemNotificationResponsePart)
+    case inputRequest(InputRequestResponsePart)
+    /// Unknown or future discriminant; the raw payload is preserved
+    /// and re-encoded verbatim for forward-compatibility.
+    case unknown(AnyCodable)
+
+    private enum DiscriminantKey: String, CodingKey {
+        case discriminant = "kind"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DiscriminantKey.self)
+        let discriminant = try container.decode(String.self, forKey: .discriminant)
+        switch discriminant {
+        case "markdown":
+            self = .markdown(try MarkdownResponsePart(from: decoder))
+        case "contentRef":
+            self = .contentRef(try ResourceResponsePart(from: decoder))
+        case "toolCall":
+            self = .toolCall(try ToolCallResponsePart(from: decoder))
+        case "reasoning":
+            self = .reasoning(try ReasoningResponsePart(from: decoder))
+        case "systemNotification":
+            self = .systemNotification(try SystemNotificationResponsePart(from: decoder))
+        case "inputRequest":
+            self = .inputRequest(try InputRequestResponsePart(from: decoder))
+        default:
+            self = .unknown(try AnyCodable(from: decoder))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .markdown(let value): try value.encode(to: encoder)
+        case .contentRef(let value): try value.encode(to: encoder)
+        case .toolCall(let value): try value.encode(to: encoder)
+        case .reasoning(let value): try value.encode(to: encoder)
+        case .systemNotification(let value): try value.encode(to: encoder)
+        case .inputRequest(let value): try value.encode(to: encoder)
+        case .unknown(let value): try value.encode(to: encoder)
         }
     }
 }

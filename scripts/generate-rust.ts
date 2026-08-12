@@ -511,6 +511,8 @@ function generateRustEnum(enumDecl: EnumDeclaration): string {
 interface StructOpts {
   /** Omit fields flagged as literal discriminants (for union variants). */
   omitDiscriminants?: boolean;
+  /** Omit Serialize derive when a hand-written implementation is emitted. */
+  omitSerialize?: boolean;
   /** Force `Default` derive (synthesizes Default impl when all fields optional). */
   deriveDefault?: boolean;
   /** Docstring for the struct itself. */
@@ -527,7 +529,11 @@ function generateRustStruct(rustName: string, props: RustProp[], opts: StructOpt
     for (const d of opts.doc.split('\n')) lines.push(`/// ${d.trimEnd()}`);
   }
 
-  const derives = ['Debug', 'Clone', 'PartialEq', 'Serialize', 'Deserialize'];
+  const derives = ['Debug', 'Clone', 'PartialEq'];
+  if (!opts.omitSerialize) {
+    derives.push('Serialize');
+  }
+  derives.push('Deserialize');
   if (wantsDefault) derives.push('Default');
   lines.push(`#[derive(${derives.join(', ')})]`);
   lines.push('#[serde(rename_all = "camelCase")]');
@@ -815,10 +821,10 @@ const STATE_STRUCTS: { name: string; omitDiscriminants?: boolean; rustName?: str
   { name: 'ResourceChange' },
 ];
 
-const RESPONSE_PART_UNION: UnionConfig = {
-  name: 'ResponsePart',
+const APPENDABLE_RESPONSE_PART_UNION: UnionConfig = {
+  name: 'AppendableResponsePart',
   discriminantField: 'kind',
-  doc: 'A single part of a response stream (text, tool call, reasoning, content reference).',
+  doc: 'A non-error part that may be appended while a turn is active.',
   variants: [
     { variantName: 'Markdown', innerType: 'MarkdownResponsePart', wireValue: 'markdown' },
     { variantName: 'ContentRef', innerType: 'ResourceResponsePart', wireValue: 'contentRef' },
@@ -826,6 +832,16 @@ const RESPONSE_PART_UNION: UnionConfig = {
     { variantName: 'Reasoning', innerType: 'ReasoningResponsePart', wireValue: 'reasoning' },
     { variantName: 'SystemNotification', innerType: 'SystemNotificationResponsePart', wireValue: 'systemNotification' },
     { variantName: 'InputRequest', innerType: 'InputRequestResponsePart', wireValue: 'inputRequest' },
+  ],
+  unknown: true,
+};
+
+const RESPONSE_PART_UNION: UnionConfig = {
+  name: 'ResponsePart',
+  discriminantField: 'kind',
+  doc: 'A single part of a response stream (text, tool call, reasoning, content reference).',
+  variants: [
+    ...APPENDABLE_RESPONSE_PART_UNION.variants,
     { variantName: 'Error', innerType: 'ErrorResponsePart', wireValue: 'error' },
   ],
   unknown: true,
@@ -1159,6 +1175,8 @@ function generateStateFile(project: Project): string {
   lines.push('// ─── Discriminated Unions ─────────────────────────────────────────────\n');
   lines.push(generateChatOrigin());
   lines.push('');
+  lines.push(generateDiscriminatedUnion(APPENDABLE_RESPONSE_PART_UNION));
+  lines.push('');
   lines.push(generateDiscriminatedUnion(RESPONSE_PART_UNION));
   lines.push('');
   lines.push(generateDiscriminatedUnion(TOOL_CALL_STATE_UNION));
@@ -1330,10 +1348,49 @@ pub struct ${scope}ToolCallConfirmedAction {
 }`;
 }
 
+function generateChatErrorActionSerializeImpl(): string {
+  return `#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatErrorActionPart<'a> {
+    kind: &'static str,
+    error: &'a ErrorInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resumable: Option<bool>,
+}
+
+impl Serialize for ChatErrorAction {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct(
+            "ChatErrorAction",
+            if self.meta.is_some() { 4 } else { 3 },
+        )?;
+        state.serialize_field("turnId", &self.turn_id)?;
+        state.serialize_field("duration", &self.duration)?;
+        state.serialize_field(
+            "part",
+            &ChatErrorActionPart {
+                kind: "error",
+                error: &self.part.error,
+                resumable: self.part.resumable,
+            },
+        )?;
+        if let Some(meta) = &self.meta {
+            state.serialize_field("_meta", meta)?;
+        }
+        state.end()
+    }
+}`;
+}
+
 function generateActionsFile(project: Project): string {
   const lines: string[] = [GENERATED_HEADER];
   lines.push('#[allow(unused_imports)]');
-  lines.push('use crate::state::{AgentInfo, AgentSelection, Annotation, AnnotationEntry, ChatInputAnswer, ChatInputRequest, ChatInputResponseKind, ChatInteractivity, ChatOrigin, ConfirmationOption, ContentRef, Customization, ErrorInfo, ErrorResponsePart, McpAuthRequirement, McpServerState, ModelSelection, ResponsePart, SessionActiveClient, SessionInputRequest, SideChatSelection, TerminalClaim, TerminalInfo, TextRange, ToolCallContributor, ToolCallResult, ToolCallRiskAssessment, ToolCallConfirmationReason, ToolCallCancellationReason, ToolDefinition, ToolInput, ToolResultContent, UsageInfo, Message, PendingMessageKind, Turn, ChangesetStatus, ChangesetFile, ChangesetOperation, ChangesetOperationStatus, Changeset, ChatSummary};');
+  lines.push('use crate::state::{AgentInfo, AgentSelection, Annotation, AnnotationEntry, AppendableResponsePart, ChatInputAnswer, ChatInputRequest, ChatInputResponseKind, ChatInteractivity, ChatOrigin, ConfirmationOption, ContentRef, Customization, ErrorInfo, ErrorResponsePart, McpAuthRequirement, McpServerState, ModelSelection, ResponsePart, SessionActiveClient, SessionInputRequest, SideChatSelection, TerminalClaim, TerminalInfo, TextRange, ToolCallContributor, ToolCallResult, ToolCallRiskAssessment, ToolCallConfirmationReason, ToolCallCancellationReason, ToolDefinition, ToolInput, ToolResultContent, UsageInfo, Message, PendingMessageKind, Turn, ChangesetStatus, ChangesetFile, ChangesetOperation, ChangesetOperationStatus, Changeset, ChatSummary};');
   lines.push('');
 
   // ActionType enum
@@ -1382,7 +1439,12 @@ pub struct ActionEnvelope {
     try {
       lines.push(generateStructFromInterface(project, v.tsInterface, undefined, {
         omitDiscriminants: true,
+        omitSerialize: v.tsInterface === 'ChatErrorAction',
       }));
+      if (v.tsInterface === 'ChatErrorAction') {
+        lines.push('');
+        lines.push(generateChatErrorActionSerializeImpl());
+      }
       lines.push('');
     } catch (e) {
       lines.push(`// TODO: could not generate ${v.tsInterface}: ${e}`);
@@ -1891,6 +1953,7 @@ function checkExhaustiveness(project: Project): void {
     'StateAction',
     'ActionEnvelope',
     'ActionOrigin',
+    'AppendableResponsePart',
     'ResponsePart',
     'ToolResultContent',
     'SessionToolCallApprovedAction',

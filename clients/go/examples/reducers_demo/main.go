@@ -28,7 +28,7 @@ func main() {
 		{Value: &ahptypes.ChatResponsePartAction{
 			Type:   ahptypes.ActionTypeChatResponsePart,
 			TurnId: "t1",
-			Part: ahptypes.ResponsePart{Value: &ahptypes.MarkdownResponsePart{
+			Part: ahptypes.AppendableResponsePart{Value: &ahptypes.MarkdownResponsePart{
 				Kind:    ahptypes.ResponsePartKindMarkdown,
 				Id:      "p1",
 				Content: "Hi ",

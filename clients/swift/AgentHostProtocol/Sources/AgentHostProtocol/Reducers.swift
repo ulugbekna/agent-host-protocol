@@ -27,6 +27,26 @@ private func withStatusFlag(_ status: SessionStatus, _ flag: SessionStatus, _ se
     set ? status.union(flag) : status.subtracting(flag)
 }
 
+private func responsePart(_ part: AppendableResponsePart) -> ResponsePart {
+    switch part {
+    case .markdown(let value): return .markdown(value)
+    case .contentRef(let value): return .contentRef(value)
+    case .toolCall(let value): return .toolCall(value)
+    case .reasoning(let value): return .reasoning(value)
+    case .systemNotification(let value): return .systemNotification(value)
+    case .inputRequest(let value): return .inputRequest(value)
+    case .unknown(let value): return .unknown(value)
+    }
+}
+
+private func isErrorResponsePart(_ part: AppendableResponsePart) -> Bool {
+    guard case .unknown(let raw) = part,
+          let value = raw.value as? [String: Any] else {
+        return false
+    }
+    return value["kind"] as? String == "error"
+}
+
 /// Whether an entry blocks on the *user*.
 ///
 /// `.toolClientExecution` is work delegated to a client, not a prompt: the call
@@ -164,10 +184,10 @@ public func chatReducer(state: ChatState, action: StateAction) -> ChatState {
         guard var activeTurn = state.activeTurn, activeTurn.id == a.turnId else {
             return state
         }
-        if case .error = a.part {
+        guard !isErrorResponsePart(a.part) else {
             return state
         }
-        activeTurn.responseParts.append(a.part)
+        activeTurn.responseParts.append(responsePart(a.part))
         var next = state
         next.activeTurn = activeTurn
         return next
